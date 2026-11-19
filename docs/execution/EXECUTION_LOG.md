@@ -91,3 +91,13 @@ En el árbol compartido pasaron el gate de especificación, la integridad RCTF, 
 Codex reanudó en `47925143cef894b8f1d40e884d2d4b85799a594e`, con árbol e índice limpios y coincidencia de HEAD con origin/main. Pasaron integridad y gate de especificación. Se reutilizó el índice de ensayo: 24 SHA cotejados, 5.899 páginas declaradas y 34.662 fragmentos. Se midieron las mismas 14 preguntas antes y después, con evaluación y cotejo local. [Protocolo de evaluación y resultados](../quality/ROBUSTEZ_CORPUS_2026-11-19.md)
 
 El corte final pasó 36 pruebas, 5 subcasos y 1 aviso de deprecación de Starlette en 16,36 s con `.venv/bin/python -B -m pytest -p no:cacheprovider -q tests/financial tests/p0 tests/harness`. Aciertos completos 11/14 y 21/21 páginas citadas abrieron sus PNG. La rama de extracción local y el índice de P0 conservan su contrato. AC-06 quedó en NOT RUN.
+
+## 2026-11-19 · Cierre del simulacro
+
+Codex confirmó el commit manual del solicitante `9929cb2e078e12393ded2bed3d2eae3f32100e1a` en HEAD, origin/main y la consulta de solo lectura a la rama remota. El árbol estaba limpio antes de aplicar el cierre. Pasaron los controles de integridad, aislamiento y especificación. Se reutilizó el índice de 24 PDF sin reingesta.
+
+El ejecutor `tests/financial/evaluate_robustness.py` pasó 14/14 de la muestra. Se cotejaron R08 y R09 contra `2T24.pdf`, p. 7, con diferencias respectivas −8.461 millones de dólares y −101.624 millones de pesos. R14 se abstuvo por saldo no aditivo antes de usar herramientas. La comparación JSON confirmó que los otros 11 casos retienen código HTTP, estado, texto y citas. Se abrieron 25/25 PNG. Las 6 pruebas `npm run smoke` de P0 pasaron en 19,6 s sobre Chromium. [Informe de cierre](../quality/ROBUSTEZ_CORPUS_2026-11-19.md)
+
+El cierre prepara únicamente cambios locales del arnés de pruebas, código y documentación. AC-06 queda NOT RUN. La frontera Git excluye los originales RCTF, el corpus, los índices y las credenciales.
+
+Regresión final `.venv/bin/python -B -m pytest -p no:cacheprovider -q tests/financial tests/p0 tests/harness`: 41 pruebas y 5 subcasos pasaron en 13,12 s. Se observó el aviso preexistente de deprecación del cliente de pruebas de Starlette. Se verificaron cambios contra 9929cb2 y se preparó exclusivamente el cierre local para revisión.

@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .agent import ChatResponse, ProviderUnavailable
 from .corpus import Citation, Corpus, SourceRef
-from .finance import Abstain, Operand, Operation, PERIOD, Period, calculate, display, local_period, normalize
+from .finance import Abstain, Operand, Operation, PERIOD, Period, calculate, check_stock_sum, display, local_period, normalize
 from .financial_evidence import CURRENCY, UnverifiedBasis, currency_key, find_candidates, read_operand
 
 ToolName = Literal["list_documents", "search_corpus", "read_source", "financial_calculator", "inspect_page_visual"]
@@ -67,11 +67,11 @@ def parse_intent(question):
     periods = list(dict.fromkeys(local_period(match) for match in matches))
     prefix = PERIOD.split(question, maxsplit=1)[0].strip(" ¿?!:")
     prefix = re.sub(r"^(?:en cu[aá]nto cambi[oó] |cuál (?:fue|es) la |calcula(?:r)? |compara(?:r)? |compara(?:r)? la )", "", prefix, flags=re.I)
-    prefix = re.sub(r"^(?:(?:la |el )?(?:variación(?: porcentual)?|diferencia|razón|suma|comparación)\s+(?:de |en )(?:la |el )?|la |el )", "", prefix, flags=re.I)
+    prefix = re.sub(r"^(?:suma\s+(?=(?:el|los|las)\s))", "", prefix, flags=re.I)
+    prefix = re.sub(r"^(?:(?:la |el |los |las )?(?:variación(?: porcentual)?|diferencia|razón|suma|comparación)\s+(?:de |en )(?:la |el |los |las )?|la |el |los |las )", "", prefix, flags=re.I)
     metric_entity = re.sub(r"\s+(?:entre|del|de|en|para)\s*$", "", prefix, flags=re.I).strip()
-    metric, marker, entity = metric_entity.partition(" de ")
-    if not marker or not re.match(r"(?:grupo|banco|gfnorte)\b", entity, re.I):
-        metric, entity = metric_entity, ""
+    subject = re.search(r"\s+de\s+((?:grupo|banco|gfnorte)\b.*)$", metric_entity, re.I)
+    metric, entity = (metric_entity[:subject.start()], subject[1]) if subject else (metric_entity, "")
     if len(periods) != 2 or not normalize(metric):
         raise Abstain("Indica un indicador y dos periodos distintos, por ejemplo «Compara utilidad neta de Grupo Faro entre 3T24 y 3T25».")
     key = question.casefold()
@@ -181,6 +181,7 @@ class FinancialAgent:
         trace = Trace()
         try:
             intent = parse_intent(question)
+            check_stock_sum(intent.operation, intent.metric)
             async with asyncio.timeout(self.timeout):
                 while True:
                     proposal = await self.provider.propose(intent, trace)
@@ -219,7 +220,10 @@ class FinancialAgent:
             attempted = trace.attempted.setdefault(params.period, set())
             attempted.add((params.ref.doc_id, params.ref.pdf_page))
             try:
-                operand = read_operand(self.corpus, params.ref, intent.metric, periods[params.period])
+                period = periods[params.period]
+                other = intent.current if period == intent.base else intent.base
+                operand = read_operand(self.corpus, params.ref, intent.metric, period, other=other,
+                                       requested_currency=intent.output_currency, requested_scale=intent.output_scale)
                 if intent.entity and normalize(intent.entity) != normalize(operand.entity):
                     raise Abstain("La entidad de la fuente difiere de la solicitada.")
             except (RuntimeError, OSError):

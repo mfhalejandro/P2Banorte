@@ -7,6 +7,7 @@ import pymupdf
 
 from .corpus import Corpus, PDF_LOCK, SourceRef, terms
 from .finance import Abstain, Operand, PERIOD, Period, Unit, decimal_from_source, local_period, normalize
+from .market_table import MARKET_ROW, is_market_metric, market_cells
 
 ENTITY = re.compile(r"(?im)^\s*(?:tabla comparativa\s*[-–]\s*)?(?:entidad\s*:\s*([^\n|]+)|((?:grupo|banco)\s+[^\n|]+?)\s+(?:no\s+)?consolidad[oa]\b|(GFNorte)\s*[-–,])")
 BASIS = re.compile(r"\b(?:no\s+)?consolidad[oa](?:\s+con\s+subsidiarias)?\b", re.I)
@@ -46,6 +47,10 @@ def find_candidates(corpus: Corpus, metric: str, period: Period, other: Period |
             SELECT doc, page, body FROM chunks WHERE chunks MATCH ?
             ORDER BY bm25(chunks) ASC LIMIT 300
         """, ('"indicadores financieros"',)).fetchall() if short_indicator else []
+        market_pages = db.execute("""
+            SELECT doc, page, body FROM chunks WHERE chunks MATCH ?
+            ORDER BY bm25(chunks) ASC, doc, page, fragment LIMIT 400
+        """, ('("informacion" AND "accion" AND "grupo") OR "bursatiles"',)).fetchall() if is_market_metric(metric) else []
     pages = {}
     header_scores = {}
     for row in headings:
@@ -59,6 +64,11 @@ def find_candidates(corpus: Corpus, metric: str, period: Period, other: Period |
         if period in codes:
             key = (row["doc"], row["page"])
             header_scores[key] = 4 + int(other in codes)
+    for row in market_pages:
+        codes = {local_period(m) for m in PERIOD.finditer(row["body"])}
+        if period in codes:
+            key = (row["doc"], row["page"])
+            header_scores[key] = max(header_scores.get(key, 0), 4 + int(other in codes))
     for row in rows:
         key = (row["doc"], row["page"])
         codes = {local_period(m) for m in PERIOD.finditer(row["body"])}
@@ -92,7 +102,7 @@ def unit_from_context(text, original, scope):
 
 
 def make_operand(citation, metric, period, original, context, notes, scope, comma_grouping, note_citation,
-                 *, indicators=None, definition=None):
+                 *, indicators=None, definition=None, market_entity=None):
     entities = {normalize(next(group for group in m.groups() if group)): next(group for group in m.groups() if group)
                 for m in ENTITY.finditer(context)}
     bases = {normalize(m.group()): m.group() for m in BASIS.finditer(context)}
@@ -101,6 +111,9 @@ def make_operand(citation, metric, period, original, context, notes, scope, comm
             raise Abstain("El encabezado y la sección de indicadores identifican entidades distintas.")
         entities = {normalize(indicators): indicators}
         bases = {"indicadores": "indicadores financieros con metodología explícita"}
+    if market_entity:
+        entities = {normalize(market_entity): market_entity}
+        bases = {"mercado": "capitalización de la acción del grupo"}
     if len(entities) != 1 or len(bases) != 1:
         raise Abstain("La entidad o la base de consolidación no se puede identificar inequívocamente.")
     note = "La fuente advierte una reexpresión o cambio de perímetro." if NOTE.search(notes) else None
@@ -196,7 +209,53 @@ def table_operands(page, period, metric, citation, notes, note_citation):
     return candidates[0] if candidates else None
 
 
-def read_operand(corpus, ref, metric, period):
+def market_operand(document, page, citation, metric, period, other, requested_currency, requested_scale,
+                   notes, note_citation):
+    inline = MARKET_ROW.fullmatch(metric)
+    if inline:
+        unit = CURRENCY.fullmatch(inline[1].strip())
+        if unit is None:
+            raise Abstain("La unidad de capitalización solicitada no es inequívoca.")
+        scale, currency = unit.groups()
+        inline_currency = currency_key(currency)
+        inline_scale = scale.lower() if scale else None
+        if ((requested_currency and requested_currency != inline_currency)
+                or (requested_scale and inline_scale != requested_scale)):
+            raise Abstain("La consulta especifica unidades de capitalización incompatibles.")
+        requested_currency, requested_scale = inline_currency, inline_scale
+
+    def matches_unit(label):
+        unit = CURRENCY.fullmatch(label.strip())
+        if unit is None:
+            return False
+        scale, currency = unit.groups()
+        return ((not requested_currency or currency_key(currency) == requested_currency)
+                and (not requested_scale or requested_scale == (scale or "").lower()))
+
+    cell = market_cells(page, period, other, matches_unit)
+    indices = [page.number] + ([page.number - 1] if page.number else [])
+    entities = set()
+    for index in indices:
+        text = document[index].get_text(sort=True)
+        entities.update(next(item for item in match.groups() if item) for match in ENTITY.finditer(text))
+    if len({normalize(entity) for entity in entities}) != 1:
+        raise Abstain("No se pudo vincular el encabezado bursátil con una entidad única.")
+    scope = f"{citation.doc_id}:{citation.pdf_page}:bursatil:{cell.header}"
+    source = citation.model_copy(update={
+        "evidence_id": f"{scope}:{cell.row}:{cell.column}",
+        "snippet": f"{cell.label} | {period.label} | {cell.value}",
+    })
+    page_text = page.get_text(sort=True)
+    comma_grouping = bool(re.search(r"(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d+)", page_text)
+                          or re.search(r"(?<![\d.,])\d{1,3}(?:,\d{3}){2,}(?![\d.,])", page_text))
+    has_decimal_comma = re.search(r"(?<![\d.,])\d{1,3}(?:\.\d{3})+,\d+", page_text)
+    if comma_grouping and has_decimal_comma and ("," in cell.value or "." in cell.value):
+        raise Abstain("La página mezcla convenciones numéricas y la escala del importe es ambigua.")
+    return make_operand(source, metric, period, cell.value, cell.unit, notes, scope,
+                        comma_grouping, note_citation, market_entity=min(entities))
+
+
+def read_operand(corpus, ref, metric, period, *, other=None, requested_currency=None, requested_scale=None):
     citation = corpus.read_source(ref)
     _, original = corpus.original(ref.doc_id)
     with PDF_LOCK, pymupdf.open(stream=original, filetype="pdf") as document:
@@ -213,6 +272,9 @@ def read_operand(corpus, ref, metric, period):
                 "pdf_page": index + 1, "evidence_id": f"{ref.doc_id}:{index + 1}:nota",
                 "snippet": "Nota sobre base contable o perímetro.",
             })
+        if is_market_metric(metric):
+            return market_operand(document, page, citation, metric, period, other,
+                                  requested_currency, requested_scale, notes, note_citation)
         selected = table_operands(page, period, metric, citation, notes, note_citation)
         if selected:
             return selected

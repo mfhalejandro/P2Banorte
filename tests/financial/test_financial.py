@@ -246,3 +246,85 @@ def test_abstention_cites_reexpression_without_using_flagged_operand(corpus):
     assert "123.40" not in result["answer"]
     assert any(c["filename"] == "B-consultado.pdf" and c["pdf_page"] == 2 and c["evidence_id"].endswith(":nota")
                for c in result["citations"])
+
+
+def market_report(path, layout, *, duplicate_period=False, reverse_rows=False):
+    """Tabla sin divisiones internas, con dos monedas y una comparación porcentual."""
+    import pymupdf
+
+    with pymupdf.open() as pdf:
+        pdf.new_page().insert_text((40, 55), "Grupo Faro consolidado")
+        page = pdf.new_page()
+        page.draw_rect((25, 65, 555, 190))
+        page.insert_text((38, 94), "Información de la Acción del Grupo", fontsize=10)
+        page.insert_text((480, 83), "Var. Vs.", fontsize=9)
+        page.insert_text((480, 106), "1T24", fontsize=9)
+
+        def insert_column(x, y, text, size):
+            width = pymupdf.get_text_length(text, fontsize=size)
+            page.insert_text((x - width / 2, y), text, fontsize=size)
+
+        dollar_y, peso_y = (157, 136) if reverse_rows else (136, 157)
+        for index, (x, period, dollars, pesos) in enumerate(layout):
+            insert_column(x, 94, "1T24" if duplicate_period and index == 0 else period, 10)
+            insert_column(x, dollar_y, dollars, 10)
+            insert_column(x, peso_y, pesos, 10)
+        page.insert_text((38, dollar_y), "Capitalización de mercado (Millones de dólares)", fontsize=9)
+        page.insert_text((38, peso_y), "Capitalización de mercado (Millones de pesos)", fontsize=9)
+        page.insert_text((480, dollar_y), "(28%)", fontsize=9)
+        page.insert_text((480, peso_y), "(20%)", fontsize=9)
+        page.insert_text((38, 180), "Precio de referencia 1,234.50", fontsize=9)
+        pdf.save(path)
+
+
+@pytest.mark.parametrize("currency,expected,operands,layout", [
+    ("dólares", "-8461 millones de dólares", ("30,761", "22,300"),
+     [(264, "2T24", "22,300", "406,931"), (340, "1T24", "30,761", "508,555"),
+      (419, "3T23", "23,762", "407,173")]),
+    ("pesos", "-101624 millones de pesos", ("508,555", "406,931"),
+     [(280, "3T23", "23,762", "407,173"), (358, "2T24", "22,300", "406,931"),
+      (437, "1T24", "30,761", "508,555")]),
+])
+def test_market_capitalization_matches_period_and_currency(tmp_path, currency, expected, operands, layout):
+    sources = tmp_path / "sources"
+    sources.mkdir()
+    market_report(sources / "tabla-variable.pdf", layout, reverse_rows=currency == "pesos")
+    corpus = Corpus(sources, tmp_path / "db")
+    corpus.index()
+    with TestClient(create_app(corpus, financial_provider=LocalToolDouble())) as api:
+        result = ask(api, f"Compara capitalización de mercado (millones de {currency}) "
+                          "de Grupo Faro entre 1T24 y 2T24")
+        assert result["status"] == "answered" and expected in result["answer"]
+        assert len(result["citations"]) == 2
+        for cite, operand in zip(result["citations"], operands):
+            assert cite["snippet"].endswith(operand) and currency in cite["snippet"]
+            assert cite["filename"] == "tabla-variable.pdf" and cite["pdf_page"] == 2
+            url = f'/api/documents/{cite["doc_id"]}/pages/2/image'
+            assert api.get(url).content.startswith(b"\x89PNG")
+
+
+@pytest.mark.parametrize("ambiguous", ["moneda", "periodo"])
+def test_market_capitalization_abstains_on_ambiguous_row_or_header(tmp_path, ambiguous):
+    data = tmp_path / "input"
+    data.mkdir()
+    layout = [(268, "3T23", "23,762", "407,173"), (348, "1T24", "30,761", "508,555"),
+              (428, "2T24", "22,300", "406,931")]
+    market_report(data / "tabla.pdf", layout, duplicate_period=ambiguous == "periodo")
+    corpus = Corpus(data, tmp_path / "state")
+    corpus.index()
+    qualifier = " (millones de dólares)" if ambiguous == "periodo" else ""
+    with TestClient(create_app(corpus, financial_provider=LocalToolDouble())) as api:
+        result = ask(api, f"Compara capitalización de mercado{qualifier} entre 1T24 y 2T24")
+    assert result["status"] == "abstained" and not result["citations"]
+
+
+def test_stock_sum_is_rejected_without_reading_sources(corpus, monkeypatch):
+    def unavailable():
+        pytest.fail("La decisión de aditividad no debe depender del catálogo o la extracción.")
+
+    monkeypatch.setattr(corpus, "catalog", unavailable)
+    with TestClient(create_app(corpus, financial_provider=LocalToolDouble())) as api:
+        result = ask(api, "Calcula la suma de activo total de Grupo Faro entre 3T24 y 3T25")
+    assert result["status"] == "abstained"
+    assert "saldo a una fecha de corte" in result["answer"] and "no es aditiva" in result["answer"]
+    assert result["tools_used"] == [] and result["citations"] == []

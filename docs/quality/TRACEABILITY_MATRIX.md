@@ -28,3 +28,12 @@ Al aprobar una spec, añadir su identificador y plan a las filas correspondiente
 | PRD AC-19 y AC-21 | SPEC-002-AC-06 | T-10, ciclo sintético con proveedor real | NOT RUN, autorización independiente pendiente |
 
 La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la evidencia de SPEC-002 en AC-01 a AC-05. Registra por separado exactitud, abstenciones y cobertura de tablas pendientes. AC-06 sigue en NOT RUN.
+
+| Cierre | Criterio | Evidencia | Resultado |
+|---|---|---|---|
+| R08/R09, capitalización por moneda y periodo | SPEC-002-AC-02/03 · T-05/T-06/T-07/T-08 | Pruebas con filas y columnas reordenadas, tabla ambigua y verificación real de `2T24.pdf`, p. 7 | VERIFIED en muestra local |
+| R14, saldo no aditivo | SPEC-002-AC-03 · T-07 | Rechazo previo a recuperación, con catálogo indisponible en fixture | VERIFIED |
+| Regresión P0 y SPEC-002 local | SPEC-001-AC-01/02/06 y SPEC-002-AC-01 a AC-05 · T-09/T-12/T-13 | Mismas 14 consultas y 25 PNG; Python y navegador P0 | VERIFIED en muestra local |
+| Proveedor generativo real | SPEC-002-AC-06 | Autorización independiente pendiente | NOT RUN |
+
+[Resultados finales y reproducción](ROBUSTEZ_CORPUS_2026-11-19.md#cierre-del-simulacro-sobre-la-base-publicada-9929cb2)

@@ -62,3 +62,31 @@ PYTHONPATH=. .venv/bin/python -B tests/financial/evaluate_robustness.py > /tmp/p
 ```
 
 Se pueden indicar casos al final del primer comando, por ejemplo `R05 R07 R11`. Las trazas detalladas incluyen únicamente datos del ensayo local, con páginas candidatas, lecturas, citas y resultado HTTP.
+
+## Cierre del simulacro sobre la base publicada `9929cb2`
+
+Las tablas anteriores conservan la comparación histórica. En esa medición, **11/14 aciertos completos = 6/8 cálculos exactos y respaldados + 5/6 abstenciones con causa y respaldo adecuados**. La métrica **6/6 abstenciones** solo contaba la decisión de abstenerse. R14 contaba en esa métrica, pero quedaba fuera de los aciertos completos porque la respuesta atribuía la abstención a la lectura.
+
+Se repitieron las mismas 14 consultas por la API sobre el índice existente de los 24 PDF, sin reingesta. Las 11 consultas distintas de R08, R09 y R14 conservaron el mismo estado HTTP, respuesta y citas. El ejecutor y los oráculos anteriores permiten reproducir las métricas.
+
+| Métrica | Publicado `9929cb2` | Cierre local |
+|---|---:|---:|
+| Aciertos completos | 11/14 | **14/14** |
+| Cálculos exactos, con unidad y dos operandos acreditados | 6/8 | **8/8** |
+| Abstenciones en casos que las requerían | 6/6 | **6/6** |
+| Abstenciones con causa específica y evidencia cuando aplica | 5/6 | **6/6** |
+| PNG de las citas emitidas | 21/21 | **25/25** |
+| Cálculos improcedentes / errores HTTP | 0 / 0 | **0 / 0** |
+| Mediana / máximo del POST | 4,72 s / 6,93 s | **4,41 s / 6,53 s** |
+
+| Caso | Resultado del cierre | Evidencia y regresión |
+|---|---|---|
+| R08 · Dólares | **−8.461 millones de dólares**. 30.761 en 1T24 y 22.300 en 2T24. | Ambas citas abren `2T24.pdf`, p. 7. Las dos cifras coinciden con la fila de dólares en el original. El fixture invierte el orden de los periodos y conserva una columna señuelo de variación. |
+| R09 · Pesos | **−101.624 millones de pesos**. 508.555 en 1T24 y 406.931 en 2T24. | Ambas citas abren `2T24.pdf`, p. 7. Las dos cifras coinciden con la fila de pesos. El fixture usa otras posiciones horizontales e invierte el orden impreso de las monedas. |
+| R14 · Suma de activo total | **Abstención por stock no aditivo**. El activo total es un saldo a una fecha de corte. | Decisión previa al catálogo, recuperación y extracción. La API no adjunta cifras ni citas. El oráculo de la clasificación y los saldos se cotejó en `2T24.pdf`, p. 6. Una prueba fuerza que el catálogo sea inutilizable y exige el mismo diagnóstico. |
+
+**VERIFIED.** La lectura focal usa la etiqueta de moneda de la fila y alinea los valores con los encabezados de periodo por coordenadas. Ambos operandos deben quedar asociados de forma única a la misma tabla. Las pruebas cubren monedas y periodos ambiguos, además de las dos comparaciones reales. La comparación numérica sigue en Decimal y la cita sigue abriendo el PNG original de P0. Pasaron 6 casos de Chromium para el flujo extractivo P0, incluidos cinco anchos de pantalla. La bitácora conserva los comandos de regresión.
+
+**PARTIAL.** La cobertura verificada es la de esta muestra dirigida. Las tablas con encabezados o alineaciones ambiguos, convenciones numéricas mezcladas y monedas nominales entre fuentes sin equivalencia acreditada todavía pueden producir abstención. La publicación de este cierre está preparada para revisión y su ejecución requiere la autorización correspondiente.
+
+**NOT RUN.** AC-06, integración con inferencia generativa externa. El ensayo usa el doble local y el render PNG existente.

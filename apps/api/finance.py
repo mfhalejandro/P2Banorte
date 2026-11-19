@@ -83,7 +83,16 @@ def decimal_from_source(original, *, comma_grouping=False):
     return Decimal(value)
 
 
+def check_stock_sum(operation: Operation, metric: str):
+    name = normalize(metric.partition("(")[0])
+    stocks = {"activo total", "activos totales", "total activo", "total activos", "pasivo total",
+              "total pasivo", "capital contable", "saldo cierre", "capitalizacion mercado"}
+    if operation == "sum" and name in stocks:
+        raise Abstain("La magnitud de stock es un saldo a una fecha de corte y no es aditiva entre periodos.")
+
+
 def calculate(operation: Operation, base: Operand, current: Operand) -> tuple[Decimal, str, str]:
+    check_stock_sum(operation, current.metric)
     if normalize(base.metric) != normalize(current.metric) or normalize(base.entity) != normalize(current.entity):
         raise Abstain("Las cifras corresponden a indicadores o entidades distintos.")
     if (base.period.kind, base.period.months) != (current.period.kind, current.period.months):
