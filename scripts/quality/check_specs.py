@@ -1,10 +1,14 @@
 """Verificar documentos SPEC y sus relaciones desde la raíz del proyecto."""
+import argparse
+import json
 import re
 import sys
 from datetime import date
 from pathlib import Path
 
 import yaml
+
+from check_requirements import fingerprint
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC_DIR = ROOT / "specs"
@@ -17,7 +21,24 @@ FIELDS = set("""
 """.split())
 
 
-def check(path, seen, registry, matrix):
+def confirmed_private_sources():
+    manifest = json.loads((ROOT / "docs/quality/REQUIREMENTS_INTEGRITY_MANIFEST.json").read_text())
+    if manifest["status"] != "CONFIRMED":
+        raise ValueError("la entrega RCTF requiere confirmación")
+    if fingerprint(manifest["entries"]) != manifest["sha256"]:
+        raise ValueError("la huella del inventario RCTF es inconsistente")
+    source = ROOT / "docs/requirements"
+    paths = set()
+    for entry in manifest["entries"]:
+        rel = Path(entry["path"])
+        if rel.is_absolute() or ".." in rel.parts:
+            raise ValueError("ruta inválida en el manifiesto")
+        if entry["type"] == "file" and rel.suffix == ".md":
+            paths.add(source / rel)
+    return paths
+
+
+def check(path, seen, registry, matrix, private_sources=()):
     parts = path.read_text().split("---\n", 2)
     if len(parts) != 3 or parts[0]:
         raise ValueError("falta frontmatter YAML")
@@ -48,7 +69,7 @@ def check(path, seen, registry, matrix):
         if target.startswith(("https://", "http://", "#")):
             continue
         dest = (path.parent / target.split("#")[0]).resolve()
-        if not dest.is_relative_to(ROOT) or not dest.is_file():
+        if not dest.is_relative_to(ROOT) or not (dest.is_file() or dest in private_sources):
             raise ValueError(f"enlace local inválido: {target}")
     if status in APPROVED_STATES:
         approval = meta.get("approval")
@@ -59,13 +80,23 @@ def check(path, seen, registry, matrix):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--checkout-sin-rctf", action="store_true",
+                        help="Aceptar referencias Markdown inventariadas si falta la entrega humana completa")
+    args = parser.parse_args()
+    sources = set()
+    if args.checkout_sin_rctf and not (ROOT / "docs/requirements").exists():
+        try:
+            sources = confirmed_private_sources()
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            sys.exit(f"FAIL manifiesto de referencias RCTF: {exc}")
     registry = (SPEC_DIR / "SPEC_REGISTRY.md").read_text()
     matrix = (ROOT / "docs/quality/TRACEABILITY_MATRIX.md").read_text()
     errors = []
     seen = set()
     for path in sorted(SPEC_DIR.rglob("SPEC-*.md")):
         try:
-            check(path, seen, registry, matrix)
+            check(path, seen, registry, matrix, sources)
         except (ValueError, TypeError, OSError, yaml.YAMLError) as exc:
             errors.append(f"{path.name}: {exc}")
     for target in LINK.findall(registry):

@@ -15,4 +15,4 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y python3-yaml
           fi
-          /usr/bin/python3 -B scripts/quality/check_specs.py
+          /usr/bin/python3 -B scripts/quality/check_specs.py --checkout-sin-rctf
