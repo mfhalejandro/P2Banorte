@@ -90,9 +90,9 @@ En el árbol compartido pasaron el gate de especificación, la integridad RCTF, 
 
 Codex reanudó en `47925143cef894b8f1d40e884d2d4b85799a594e`, con árbol e índice limpios y coincidencia de HEAD con origin/main. Pasaron integridad y gate de especificación. Se reutilizó el índice de ensayo: 24 SHA cotejados, 5.899 páginas declaradas y 34.662 fragmentos. Se midieron las mismas 14 preguntas antes y después, con evaluación y cotejo local. [Protocolo de evaluación y resultados](../quality/ROBUSTEZ_CORPUS_2026-11-19.md)
 
-El corte final pasó 36 pruebas, 5 subcasos y 1 aviso de deprecación de Starlette en 16,36 s con `.venv/bin/python -B -m pytest -p no:cacheprovider -q tests/financial tests/p0 tests/harness`. Aciertos completos 11/14 y 21/21 páginas citadas abrieron sus PNG. La rama de extracción local y el índice de P0 conservan su contrato. AC-06 quedó en NOT RUN.
+La medición intermedia pasó 36 pruebas, 5 subcasos y 1 aviso de deprecación de Starlette en 16,36 s con `.venv/bin/python -B -m pytest -p no:cacheprovider -q tests/financial tests/p0 tests/harness`. Aciertos completos 11/14 y 21/21 páginas citadas abrieron sus PNG. La rama de extracción local y el índice de P0 conservan su contrato. AC-06 quedó en NOT RUN.
 
-## 2026-11-19 · Cierre del simulacro
+## 2026-11-19 · Implementación del cierre sobre la base `9929cb2`
 
 Codex confirmó el commit manual del solicitante `9929cb2e078e12393ded2bed3d2eae3f32100e1a` en HEAD, origin/main y la consulta de solo lectura a la rama remota. El árbol estaba limpio antes de aplicar el cierre. Pasaron los controles de integridad, aislamiento y especificación. Se reutilizó el índice de 24 PDF sin reingesta.
 
@@ -101,3 +101,18 @@ El ejecutor `tests/financial/evaluate_robustness.py` pasó 14/14 de la muestra. 
 El cierre prepara únicamente cambios locales del arnés de pruebas, código y documentación. AC-06 queda NOT RUN. La frontera Git excluye los originales RCTF, el corpus, los índices y las credenciales.
 
 Regresión final `.venv/bin/python -B -m pytest -p no:cacheprovider -q tests/financial tests/p0 tests/harness`: 41 pruebas y 5 subcasos pasaron en 13,12 s. Se observó el aviso preexistente de deprecación del cliente de pruebas de Starlette. Se verificaron cambios contra 9929cb2 y se preparó exclusivamente el cierre local para revisión.
+
+## 2026-11-19 15:03 CDMX · Cierre definitivo de `5307d2b`
+
+Codex confirmó el mismo SHA en HEAD, origin/main y `refs/heads/main` del remoto. Al reanudar, el árbol y el índice Git estaban limpios. Los 24 PDF coincidieron por SHA-256 con el manifiesto y el índice de 34.662 fragmentos. Los originales RCTF estaban en solo lectura y fuera de Git. Pasaron los controles de integridad, especificaciones y frontera de publicación.
+
+| Evidencia | Verificación | Resultado |
+|---|---|---|
+| GitHub Actions, commit `5307d2b` | `Spec quality` sobre el checkout publicado | PASS · [ejecución 44613640612](https://github.com/mfhalejandro/P2Banorte/actions/runs/44613640612) |
+| Local, checkout limpio de `5307d2b` | `python3 -B scripts/quality/check_specs.py --checkout-sin-rctf` | PASS · 2 especificaciones |
+| Local, evaluación dirigida | `PYTHONPATH=. .venv/bin/python -B tests/financial/evaluate_robustness.py` con el índice existente | 14/14 casos completos, 8/8 cálculos, 6/6 abstenciones justificadas, 25/25 PNG. La comparación JSON confirmó el código HTTP, estado, texto y citas de los 14 casos del cierre anterior. Mediana POST 4,34 s, máximo 6,07 s. |
+| Local, regresión Python | `.venv/bin/python -B -m pytest -p no:cacheprovider -q tests/financial tests/p0 tests/harness` | PASS · 41 pruebas, 5 subcasos, 18,24 s. Aviso de deprecación preexistente de Starlette. |
+| Local, navegador P0 | `npm run smoke` en `apps/web` con Chromium preinstalado | PASS · 6 pruebas, 17,1 s. |
+| Local, dependencias | `uv lock --check --offline --no-cache --python /usr/bin/python3` y `npm --prefix apps/web ls --depth=0` | PASS · lock Python coherente y dependencias web presentes. |
+
+Se conservó el índice existente durante la verificación. Los resultados 5/14 y 11/14 se mantienen como mediciones históricas en el [informe](../quality/ROBUSTEZ_CORPUS_2026-11-19.md). El alcance de la confirmación es la muestra dirigida. SPEC-002-AC-06 permanece en NOT RUN. Las instrucciones de [instalación y ejecución](../../README.md) y de recuperación y evaluación están en los documentos existentes.

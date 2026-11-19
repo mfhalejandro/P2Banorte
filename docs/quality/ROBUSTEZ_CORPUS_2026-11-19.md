@@ -1,6 +1,6 @@
 # Robustez de SPEC-002 sobre 24 PDF de ensayo
 
-**2026-11-19 · Codex · Evaluación local y dirigida.** Línea base `4792514`, segunda medición con las correcciones de esta evaluación. Se reutilizó el índice existente sin reingesta. Sus 24 SHA-256 coincidieron con los originales, con 5.899 páginas declaradas y 34.662 fragmentos. Los 14 casos son una muestra dirigida y no estiman la cobertura general del corpus ni de Coder. AC-06 sigue en NOT RUN, pendiente de autorización independiente. La evaluación usa el doble determinista y el render local de páginas.
+**2026-11-19 · Codex · Evaluación local y dirigida.** Las mediciones históricas fueron 5/14 en `4792514` y 11/14 en `9929cb2`. El cierre publicado en `5307d2b` obtuvo 14/14 y se confirmó localmente. Se reutilizó el índice existente sin reingesta. Sus 24 SHA-256 coincidieron con los originales, con 5.899 páginas declaradas y 34.662 fragmentos. Los 14 casos son una muestra dirigida y no estiman la cobertura general del corpus ni de Coder. AC-06 sigue en NOT RUN, pendiente de autorización independiente. La evaluación usa el doble determinista y el render local de páginas.
 
 ## Método y criterios
 
@@ -8,7 +8,7 @@ Se cotejaron por separado encabezados, filas, cifras y notas con `pdftotext -lay
 
 Un acierto completo exige cifra, unidad y respaldo correctos, o abstención con la causa específica del caso y su nota cuando exista. Un rechazo seguro con causa incompleta se registra como parcial. Las cifras parciales de una abstención se cotejan por separado y no cuentan como resultados de cálculo. Las páginas son físicas y empiezan en 1.
 
-| Métrica | Base `4792514` | Después de las correcciones |
+| Métrica histórica | Base `4792514` | Medición intermedia `9929cb2` |
 |---|---:|---:|
 | Aciertos completos | 5/14 | 11/14 |
 | Resultados numéricos exactos, con unidad y dos operandos respaldados | 3/8 | 6/8 |
@@ -21,7 +21,7 @@ Un acierto completo exige cifra, unidad y respaldo correctos, o abstención con 
 
 El tiempo cubre el POST, antes de abrir el PNG. Las ejecuciones se hicieron en el entorno compartido, sin una prueba de carga controlada. La línea base de R07 abrió las páginas correctas para **pesos** y aun así falló la pregunta en **dólares**.
 
-## Registro por caso
+## Registro histórico por caso
 
 Las preguntas exactas y los pasos del agente son reproducibles con el [ejecutor local](../../tests/financial/evaluate_robustness.py).
 
@@ -42,7 +42,7 @@ Las preguntas exactas y los pasos del agente son reproducibles con el [ejecutor 
 | **R13** «¿En cuánto cambió… de 2T24 a 3T24?» | **+220 millones de pesos**, `3T24.pdf`, p. 5, mismos operandos que R01. | Abstención sin evidencia. La búsqueda recibió parte de la frase como nombre de métrica. | **Exacto**. Ambos operandos correctos y 2/2 citas válidas a `3T24.pdf`, p. 5. | Orquestación del enunciado natural corregida. |
 | **R14** Sumar activo total de 1T24 y 2T24 | **Abstención por saldos de cierre no aditivos**. 2.395.399 y 2.435.012 millones de pesos en `2T24.pdf`, p. 6. | Abstención genérica sin cifras ni citas. | **Abstención segura, causa incompleta**. La lectura no establece celdas válidas. 0 citas. | Recuperación de la base y extracción del bloque de saldos. El límite de aditividad nunca llegó a ejecutarse. |
 
-## Prioridad para el cierre
+## Hallazgos de la medición intermedia
 
 - **P0 corregido — moneda solicitada (R07).** Se valida la moneda pedida antes de devolver el cálculo. La prueba cubre rechazo en dólares y respuesta respaldada en MXN. La regresión también verifica que un candidato descartado por reexpresión no añada una advertencia a otro diagnóstico.
 - **P1 corregidos — ROE con notas (R05/R06), Bineo (R11) y enunciado natural (R13).** La recuperación prioriza la sección con encabezados del indicador. Se exige la definición cuando una fila lleva marcador numérico y se rechazan definiciones diferentes. Un candidato de base no acreditada conserva su nota para la abstención pertinente. R13 separa la métrica del enunciado y del periodo.
@@ -52,7 +52,9 @@ Las preguntas exactas y los pasos del agente son reproducibles con el [ejecutor 
 
 ## Reproducción
 
-Desde la raíz, con el índice existente de los 24 PDF:
+Instala las dependencias bloqueadas y arranca la API y el frontend según el [README](../../README.md). Para volver a abrir un índice íntegro, configura `RAG_DATA_DIR` con la misma raíz absoluta de los PDF y `RAG_STATE_DIR` con el estado de ese corpus. Una ingesta interrumpida conserva el último índice confirmado. Si se perdió el estado de 24 PDF, selecciona un directorio de estado nuevo y privado, fuera de los originales, e inicialízalo con `uv run --locked python -m apps.api.corpus --all`.
+
+Repite la evaluación desde la raíz con el índice de 24 PDF:
 
 ```bash
 export RAG_DATA_DIR="$PWD/docs/requirements/data"
@@ -63,13 +65,13 @@ PYTHONPATH=. .venv/bin/python -B tests/financial/evaluate_robustness.py > /tmp/p
 
 Se pueden indicar casos al final del primer comando, por ejemplo `R05 R07 R11`. Las trazas detalladas incluyen únicamente datos del ensayo local, con páginas candidatas, lecturas, citas y resultado HTTP.
 
-## Cierre del simulacro sobre la base publicada `9929cb2`
+## Cierre publicado en `5307d2b`
 
 Las tablas anteriores conservan la comparación histórica. En esa medición, **11/14 aciertos completos = 6/8 cálculos exactos y respaldados + 5/6 abstenciones con causa y respaldo adecuados**. La métrica **6/6 abstenciones** solo contaba la decisión de abstenerse. R14 contaba en esa métrica, pero quedaba fuera de los aciertos completos porque la respuesta atribuía la abstención a la lectura.
 
-Se repitieron las mismas 14 consultas por la API sobre el índice existente de los 24 PDF, sin reingesta. Las 11 consultas distintas de R08, R09 y R14 conservaron el mismo estado HTTP, respuesta y citas. El ejecutor y los oráculos anteriores permiten reproducir las métricas.
+Para el cierre se repitieron las 14 consultas por la API sobre el índice existente de los 24 PDF, sin reingesta. Las 11 consultas distintas de R08, R09 y R14 conservaron el mismo estado HTTP, respuesta y citas. El ejecutor y los oráculos anteriores permiten reproducir las métricas.
 
-| Métrica | Publicado `9929cb2` | Cierre local |
+| Métrica | Intermedio `9929cb2` | Cierre `5307d2b` |
 |---|---:|---:|
 | Aciertos completos | 11/14 | **14/14** |
 | Cálculos exactos, con unidad y dos operandos acreditados | 6/8 | **8/8** |
@@ -85,8 +87,8 @@ Se repitieron las mismas 14 consultas por la API sobre el índice existente de l
 | R09 · Pesos | **−101.624 millones de pesos**. 508.555 en 1T24 y 406.931 en 2T24. | Ambas citas abren `2T24.pdf`, p. 7. Las dos cifras coinciden con la fila de pesos. El fixture usa otras posiciones horizontales e invierte el orden impreso de las monedas. |
 | R14 · Suma de activo total | **Abstención por stock no aditivo**. El activo total es un saldo a una fecha de corte. | Decisión previa al catálogo, recuperación y extracción. La API no adjunta cifras ni citas. El oráculo de la clasificación y los saldos se cotejó en `2T24.pdf`, p. 6. Una prueba fuerza que el catálogo sea inutilizable y exige el mismo diagnóstico. |
 
-**VERIFIED.** La lectura focal usa la etiqueta de moneda de la fila y alinea los valores con los encabezados de periodo por coordenadas. Ambos operandos deben quedar asociados de forma única a la misma tabla. Las pruebas cubren monedas y periodos ambiguos, además de las dos comparaciones reales. La comparación numérica sigue en Decimal y la cita sigue abriendo el PNG original de P0. Pasaron 6 casos de Chromium para el flujo extractivo P0, incluidos cinco anchos de pantalla. La bitácora conserva los comandos de regresión.
+**VERIFIED.** La lectura focal usa la etiqueta de moneda de la fila y alinea los valores con los encabezados de periodo por coordenadas. Ambos operandos deben quedar asociados de forma única a la misma tabla. Las pruebas cubren monedas y periodos ambiguos, además de las dos comparaciones reales. La comparación numérica sigue en Decimal y la cita sigue abriendo el PNG original de P0. Pasaron 6 casos de Chromium para el flujo extractivo P0, incluidos cinco anchos de pantalla. La repetición local sobre `5307d2b` confirmó 14/14, 8/8, 6/6 y 25/25, además de 41 pruebas Python, 5 subcasos y 6 pruebas de navegador. GitHub Actions registró PASS para `Spec quality` sobre ese SHA. [Bitácora](../execution/EXECUTION_LOG.md) · [Ejecución de GitHub Actions](https://github.com/mfhalejandro/P2Banorte/actions/runs/44613640612)
 
-**PARTIAL.** La cobertura verificada es la de esta muestra dirigida. Las tablas con encabezados o alineaciones ambiguos, convenciones numéricas mezcladas y monedas nominales entre fuentes sin equivalencia acreditada todavía pueden producir abstención. La publicación de este cierre está preparada para revisión y su ejecución requiere la autorización correspondiente.
+**PARTIAL.** La cobertura verificada es la de esta muestra dirigida. Las tablas con encabezados o alineaciones ambiguos, convenciones numéricas mezcladas y monedas nominales entre fuentes sin equivalencia acreditada todavía pueden producir abstención. La generalización a otros layouts y formatos financieros y la evaluación en el entorno final siguen pendientes de evidencia. Los resultados describen la muestra dirigida.
 
-**NOT RUN.** AC-06, integración con inferencia generativa externa. El ensayo usa el doble local y el render PNG existente.
+**NOT RUN.** AC-06 de SPEC-002, integración de un proveedor de inferencia generativa real, pendiente de autorización independiente. La evaluación funcional usó el doble determinista local y el visor PNG.

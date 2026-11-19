@@ -20,14 +20,14 @@
 
 AC-06 queda pendiente de autorización independiente. [Plan](../../plans/implementation-spec-002-financiero.md)
 
-### Cierre dirigido de robustez
+### Cierre publicado en `5307d2b`
 
 | Tarea | Evidencia | Estado |
 |---|---|---|
 | Cierre R08/R09 · asociación moneda, fila y periodo | Dos cálculos reales exactos y cuatro citas. Dos layouts sintéticos y rechazo de ambigüedad | VERIFIED |
 | Cierre R14 · saldo de cierre | Abstención motivada antes de consultar el catálogo, con regresión sintética | VERIFIED |
-| Regresión P0 y SPEC-002 local | 14/14 de la muestra, 25/25 PNG y 6 pruebas en Chromium. Los otros 11 casos mantuvieron respuesta y citas | VERIFIED |
-| Cobertura de otros layouts y publicación del cierre | Persisten límites fuera de la muestra y la publicación depende de autorización | PARTIAL |
-| Inferencia generativa real · AC-06 | Autorización independiente pendiente | NOT RUN |
+| Regresión local P0 y SPEC-002 | 14/14 casos completos, 8/8 cálculos exactos, 6/6 abstenciones justificadas y 25/25 PNG. 41 pruebas Python, 5 subcasos y 6 pruebas de navegador | VERIFIED |
+| Evaluación fuera de la muestra | Generalización a otros layouts y formatos financieros y evaluación en el entorno final pendientes de evidencia | PARTIAL |
+| Inferencia generativa real · SPEC-002-AC-06 | Autorización independiente pendiente. Las pruebas financieras usaron un doble determinista | NOT RUN |
 
-[Informe de robustez](../quality/ROBUSTEZ_CORPUS_2026-11-19.md)
+La verificación funcional fue local. GitHub Actions registró PASS para `Spec quality` en el commit publicado. [Informe de robustez](../quality/ROBUSTEZ_CORPUS_2026-11-19.md) · [Ejecución de GitHub Actions](https://github.com/mfhalejandro/P2Banorte/actions/runs/44613640612)
