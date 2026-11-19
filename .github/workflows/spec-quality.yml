@@ -1,0 +1,18 @@
+name: Spec quality
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  specs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Comprobar specs
+        run: |
+          if ! /usr/bin/python3 -c 'import yaml'; then
+            sudo apt-get update
+            sudo apt-get install -y python3-yaml
+          fi
+          /usr/bin/python3 -B scripts/quality/check_specs.py

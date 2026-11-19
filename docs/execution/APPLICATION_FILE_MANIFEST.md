@@ -16,5 +16,12 @@ El control lee los patrones de la primera columna de esta tabla. Son rutas relat
 | `scripts/quality/*.py` | Control de integridad | Autoría local | Revisar código |
 | `scripts/security/*.py` | Control de publicación | Autoría local | Revisar código |
 | `tests/harness/*.py` | Pruebas aisladas | Autoría local, fixtures sintéticos | Revisar código |
+| `docs/adr/*.md` | Decisiones y alternativas | Proyecto, revisión de contenido | Revisar entrega |
+| `specs/*.md` | Especificaciones, registro y archivo | Proyecto, revisión de contenido | Revisar entrega |
+| `docs/architecture/*.md` | Arquitectura y diseños detallados | Proyecto, revisión de contenido | Revisar entrega |
+| `plans/*.md` | Planes de implementación | Proyecto, revisión de contenido | Revisar entrega |
+| `docs/plans/*.md` | Acceso documental a planes | Proyecto, revisión de contenido | Revisar entrega |
+| `docs/sprints/*.md` | Programación por sprint | Proyecto, revisión de contenido | Revisar entrega |
+| `.github/workflows/spec-quality.yml` | Validación de specs, permiso de lectura | Proyecto, revisión de contenido | Revisar entrega |
 
 Cuando se active la aplicación, incorporar rutas de código, pruebas y documentación aprobadas. Mantener fuera de entrega los secretos, bases, corpus operativo, archivos comprimidos y PDF reales sin permiso específico.
