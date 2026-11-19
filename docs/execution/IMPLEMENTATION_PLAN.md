@@ -10,3 +10,7 @@
 | 4. Programar y verificar | Asignar tareas del plan a un sprint y recoger evidencia | Ready/Done de §13.12 y autorizaciones aplicables |
 
 Consulta los [planes por cambio](../../plans/README.md), el [registro de specs](../../specs/SPEC_REGISTRY.md) y la [programación de sprints](SPRINTS.md).
+
+## Corte financiero local
+
+El [plan de SPEC-002](../../plans/implementation-spec-002-financiero.md) cubre AC-01 a AC-05. La prueba de inferencia real corresponde a AC-06 y requiere autorización independiente.

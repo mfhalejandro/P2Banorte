@@ -33,5 +33,6 @@ El control lee los patrones de la primera columna de esta tabla. Son rutas relat
 | `apps/web/src/*.css` | Estilos de la interfaz | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
 | `apps/web/index.html` | Entrada del cliente web | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
 | `tests/p0/*.py` | Pruebas y generador de PDF ficticios | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
+| `tests/financial/*.py` | Pruebas y generador local de PDF ficticios del corte financiero | Proyecto, código o fixtures generados | Revisión para eventual entrega |
 
 Revisar rutas adicionales al ampliar la aplicación. Mantener fuera de entrega los secretos, bases, corpus operativo, archivos comprimidos y PDF reales sin permiso específico.

@@ -4,4 +4,4 @@
 
 El registro de [tareas](SPRINTS.md) y la [bitácora](EXECUTION_LOG.md) identifican las pruebas realizadas. La autorización de entrega cubre CI y el P0 verificado en `main`. Las fuentes RCTF siguen en el entorno protegido. El modo con proveedor generativo externo requiere autorización de destino y un contrato de inferencia disponible.
 
-**Siguiente corte · en revisión funcional.** [SPEC-002 v1](../../specs/SPEC-002-comparacion-financiera.md) define la comparación financiera con dos citas, el modo generativo condicionado y la ampliación progresiva del corpus. El solicitante debe aprobar la spec antes de implementar. La prueba real requiere un proveedor de backend y autorización de destino, datos y costo aplicables.
+**SPEC-002 · corte financiero local implementado.** El modo `financial-local` comparte el índice y el visor del P0. El responsable verificó AC-01 a AC-05 con doble, pruebas de oráculos y comparación de evidencia real. AC-06 permanece NOT RUN, pendiente de autorización independiente. [Plan](../../plans/implementation-spec-002-financiero.md) · [Bitácora](EXECUTION_LOG.md)

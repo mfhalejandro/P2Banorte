@@ -2,26 +2,29 @@
 id: SPEC-002
 title: Comparación financiera trazable con herramientas V3
 version: 1
-status: IN_REVIEW
+status: IMPLEMENTED
 owner: Solicitante humano
-reviewers: []
+reviewers: [Solicitante humano]
 created_at: '2026-11-19'
 updated_at: '2026-11-19'
 prd_requirements: [AC-02, AC-03, AC-07, AC-08, AC-09, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-16, AC-18, AC-19, AC-21, AC-25, AC-26, AC-27]
 adrs: []
-sdds: []
+sdds: [SDD-002]
 dependencies: [SPEC-001]
-implementation_plan: null
-sprint_tasks: []
+implementation_plan: plans/implementation-spec-002-financiero.md
+sprint_tasks: [F-01, F-02, F-03, F-04]
 quality_gates: [SPEC_QUALITY_GATE]
 supersedes: null
 superseded_by: null
-approval: null
+approval:
+  by: Solicitante humano
+  date: '2026-11-19'
+  evidence: "Conversación del proyecto. Aprobación funcional expresa de SPEC-002 v1 para implementación local. AC-06 diferido."
 ---
 
 # SPEC-002 · Comparación financiera trazable con herramientas V3
 
-**Versión 1 · En revisión funcional.** Ante una pregunta por la variación de un mismo indicador entre dos periodos, el analista obtiene ambos valores con sus periodos y unidades, un resultado calculado por el backend y una cita a la página original por operando. Si la comparación carece de respaldo, recibe una explicación específica. El primer corte demuestra una comparación válida y una abstención. [PRD V3](../docs/requirements/PRD.md) · [Contexto financiero](../docs/requirements/context_for_the_professional.md) · [Stack](../docs/requirements/technology_stack.md) · [P0](SPEC-001-cita-pdf.md)
+**Versión 1 · Aprobada para implementación local.** Ante una pregunta por la variación de un mismo indicador entre dos periodos, el analista obtiene ambos valores con sus periodos y unidades, un resultado calculado por el backend y una cita a la página original por operando. Si la comparación carece de respaldo, recibe una explicación específica. El primer corte demuestra una comparación válida y una abstención. [PRD V3](../docs/requirements/PRD.md) · [Contexto financiero](../docs/requirements/context_for_the_professional.md) · [Stack](../docs/requirements/technology_stack.md) · [P0](SPEC-001-cita-pdf.md)
 
 ## Recorrido y límites
 
@@ -57,4 +60,8 @@ approval: null
 
 ## Gobierno
 
-2026-11-19 · Codex presenta SPEC-002 v1 desde `4620231`. El solicitante autorizó la preparación local y pruebas sintéticas con doble. La aprobación funcional sigue pendiente. El ADR de proveedor se abrirá cuando haya una elección autorizada. Tras aprobar la spec se registra el plan ejecutable y el diseño detallado aplicable del intercambio de herramientas. La comprobación preparatoria de fixtures y la línea base P0 se registran por separado de los criterios SPEC-002, todavía en NOT RUN. [Trazabilidad](../docs/quality/TRACEABILITY_MATRIX.md)
+2026-11-19 · Codex presenta SPEC-002 v1 desde `4620231`. El solicitante autorizó la preparación local y pruebas sintéticas con doble. El solicitante aprobó la implementación local de AC-01 a AC-05. AC-06 sigue pendiente de autorización independiente y no condiciona las pruebas locales. El ADR de proveedor se abrirá cuando haya una elección autorizada. Tras aprobar la spec se registra el plan ejecutable y el diseño detallado aplicable del intercambio de herramientas. La comprobación preparatoria de fixtures y la línea base P0 se registran por separado de los criterios SPEC-002, documentados en la bitácora. [Trazabilidad](../docs/quality/TRACEABILITY_MATRIX.md)
+
+2026-11-19 · IN_REVIEW → APPROVED. Aprobación expresa para el corte local. [Plan](../plans/implementation-spec-002-financiero.md) · [SDD local](../docs/architecture/sdd/SDD-002-comparacion-local.md).
+
+2026-11-19 · APPROVED → IN_PROGRESS → IMPLEMENTED (tramo local). AC-01 a AC-05 pasaron los controles locales. AC-06 permanece NOT RUN, pendiente de autorización independiente.

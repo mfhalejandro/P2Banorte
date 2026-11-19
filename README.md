@@ -68,3 +68,27 @@ npm run smoke
 La prueba de navegador levanta sus propios servidores de loopback en 8179 y 5179, genera un PDF ficticio en un directorio temporal y usa el Python de `.venv`. Puede usarse un Chromium preinstalado definiendo `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. El smoke cubre cinco anchos de pantalla, foco, página original, abstención y recuperación de errores.
 
 La evaluación con documentos reales y el estado de cada tarea se conservan en la [bitácora](docs/execution/EXECUTION_LOG.md) y en el [sprint P0](docs/execution/SPRINTS.md).
+
+## Demo de comparación financiera local
+
+El modo `financial-local` usa un doble determinista, la calculadora Decimal y las herramientas V3 contra el mismo esquema SQLite de P0. Para una demostración reproducible en otra carpeta, detén la API anterior y ejecuta:
+
+```bash
+demo_dir=$(mktemp -d)
+export RAG_DATA_DIR="$demo_dir/pdf"
+export RAG_STATE_DIR="$demo_dir/state"
+export LLM_PROVIDER=financial-local
+uv run --locked python tests/financial/fixtures.py "$RAG_DATA_DIR"
+uv run --locked python -m apps.api.corpus --all
+uv run --locked uvicorn apps.api.main:app --host 127.0.0.1 --port 8000
+```
+
+Con el frontend de desarrollo en marcha, prueba estas preguntas:
+
+- **Compara la utilidad neta de Grupo Faro entre 3T24 y 3T25.** La diferencia es 12.29 millones MXN y cada cita abre la página 2 de su propio PDF.
+- **Calcula la variación porcentual de la utilidad neta de Grupo Faro entre 3T24 y 3T25.** La variación es 11.06 %.
+- **Compara la utilidad neta de Grupo Faro entre 3T24 y 9M25.** El agente identifica la diferencia de duración o tipo y omite el cálculo.
+
+El corte busca etiquetas trimestrales como `3T25` y acumuladas como `9M25`. El primer periodo indicado es la base de cálculo. Prioriza tablas con rótulos verificables de indicador, periodo, entidad, consolidación y unidad. Ante encabezados ambiguos o evidencia insuficiente se abstiene. Para volver a P0, inicia con `LLM_PROVIDER=extractive` y sus rutas habituales. El ciclo con un proveedor generativo real (AC-06) queda pendiente de autorización independiente.
+
+Pruebas dirigidas: `uv run --locked python -B -m pytest -q tests/financial tests/p0`.

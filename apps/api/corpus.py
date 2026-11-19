@@ -9,6 +9,7 @@ import sqlite3
 import unicodedata
 from contextlib import closing
 from pathlib import Path
+from threading import Lock
 
 import pymupdf
 from pydantic import BaseModel, Field
@@ -35,6 +36,7 @@ class Citation(BaseModel):
 
 STOP = set("a al algun alguna ante aqui como con cual cuales cuando cuanto cuantos de del el en entre es esta este hay indica la las lo los me mi muestra para por que quien se segun sobre son su sus un una unos y dice documento informe reporte explica menciona mencionan describen".split())
 MAX_BYTES = 128 * 1024 * 1024
+PDF_LOCK = Lock()
 
 
 def terms(text):
@@ -67,6 +69,13 @@ class Corpus:
         state.mkdir(parents=True, exist_ok=True)
         self.db = state / "corpus.sqlite3"
         with closing(self.connect()) as db:
+            existing = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='config'").fetchone()
+            if existing:
+                config = db.execute("SELECT source FROM config WHERE id=1").fetchone()
+                if config is not None:
+                    if config["source"] != str(self.data):
+                        raise ValueError("Usa un directorio de estado propio para este corpus")
+                    return
             db.executescript("""
                 PRAGMA journal_mode=WAL;
                 CREATE TABLE IF NOT EXISTS config (id INTEGER PRIMARY KEY, source TEXT NOT NULL);
@@ -113,9 +122,13 @@ class Corpus:
         candidates = []
         for path in self.data.rglob("*"):
             if path.suffix.lower() == ".pdf" and not path.is_symlink() and path.is_file():
-                candidates.append(path)
-        selected = sorted(candidates, key=lambda p: (p.stat().st_size, p))[:limit]
-        report = dict(discovered=len(candidates), selected=len(selected), indexed=0, reused=0, failed=[])
+                try:
+                    candidates.append((path.stat().st_size, path))
+                except OSError:
+                    # Una entrada retirada durante el descubrimiento no detiene el lote.
+                    continue
+        selected = [path for _, path in sorted(candidates)[:limit]]
+        report = dict(discovered=len(candidates), selected=len(selected), indexed=0, reused=0, unique=0, aliases={}, failed=[])
         with closing(self.connect()) as db, db:
             # Una transacción publica el conjunto seleccionado completo. Un lector conserva
             # el índice anterior hasta el commit, incluso si la ingesta se interrumpe.
@@ -129,7 +142,7 @@ class Corpus:
                     doc = hashlib.sha256(data).hexdigest()
                     known = db.execute("SELECT 1 FROM docs WHERE id=?", (doc,)).fetchone()
                     if not known:
-                        with pymupdf.open(stream=data, filetype="pdf") as pdf:
+                        with PDF_LOCK, pymupdf.open(stream=data, filetype="pdf") as pdf:
                             if pdf.needs_pass or not len(pdf):
                                 raise ValueError("PDF ilegible")
                             db.execute("INSERT INTO docs VALUES (?,?)", (doc, len(pdf)))
@@ -144,6 +157,10 @@ class Corpus:
                     report["failed"].append({"file": name, "reason": type(exc).__name__})
                 finally:
                     db.execute("RELEASE pdf")
+            for path, doc in db.execute("SELECT path, doc FROM files ORDER BY path"):
+                report["aliases"].setdefault(doc, []).append(path)
+            report["unique"] = len(report["aliases"])
+            report["aliases"] = {doc: paths for doc, paths in report["aliases"].items() if len(paths) > 1}
             for (stale,) in db.execute("SELECT id FROM docs WHERE id NOT IN (SELECT doc FROM files)").fetchall():
                 db.execute("DELETE FROM chunks WHERE doc=?", (stale,))
                 db.execute("DELETE FROM docs WHERE id=?", (stale,))
@@ -207,7 +224,7 @@ class Corpus:
 
     def render(self, doc, page, dpi):
         _, data = self.original(doc)
-        with pymupdf.open(stream=data, filetype="pdf") as pdf:
+        with PDF_LOCK, pymupdf.open(stream=data, filetype="pdf") as pdf:
             if not 1 <= page <= len(pdf):
                 raise KeyError("Página fuera de rango")
             source = pdf[page - 1]

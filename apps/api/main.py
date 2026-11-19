@@ -6,13 +6,21 @@ from fastapi import FastAPI, HTTPException, Path, Query, Response
 
 from .agent import Agent, ChatRequest, ChatResponse, LocalExtractive, ProviderUnavailable
 from .corpus import Corpus
+from .financial_agent import FinancialAgent
 
 
-def create_app(corpus=None, provider=None):
+def create_app(corpus=None, provider=None, financial_provider=None):
     @asynccontextmanager
     async def lifespan(app):
         app.state.corpus = corpus or Corpus.configured()
-        app.state.agent = Agent(app.state.corpus, provider or LocalExtractive())
+        mode = os.getenv("LLM_PROVIDER", "extractive")
+        if financial_provider is not None or (provider is None and mode == "financial-local"):
+            app.state.agent = FinancialAgent(app.state.corpus, provider=financial_provider)
+        else:
+            app.state.agent = Agent(app.state.corpus, provider or LocalExtractive())
+        app.state.provider_available = (
+            provider is not None or financial_provider is not None or mode in {"extractive", "financial-local"}
+        )
         yield
 
     app = FastAPI(title="Consulta financiera documental", lifespan=lifespan)
@@ -31,7 +39,7 @@ def create_app(corpus=None, provider=None):
         question = body.message.strip()
         if not question:
             raise HTTPException(422, "Escribe una pregunta.")
-        if provider is None and os.getenv("LLM_PROVIDER", "extractive") != "extractive":
+        if not app.state.provider_available:
             raise HTTPException(503, "El proveedor configurado no está disponible en este entorno.")
         try:
             return await app.state.agent.answer(question)
