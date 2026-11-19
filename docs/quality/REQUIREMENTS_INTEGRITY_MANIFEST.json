@@ -1,0 +1,205 @@
+{
+  "delivery_date": "2026-11-19",
+  "delivery_id": "RCTF-2026-11-19",
+  "status": "CONFIRMED",
+  "confirmed_by": "Solicitante humano, confirmación explícita de la huella en la planificación del arnés",
+  "sha256": "8d269146c7662f34ed969bcfc4c8fadeb6a22a129a8fd00658dc216e3fc41b5d",
+  "entries": [
+    {
+      "path": "PRD.md",
+      "type": "file",
+      "size": 22947,
+      "sha256": "7c66a68dbd121430cffbf16c6b637b8e0e69cdf2cbd655bcec70e1eed19eff0b"
+    },
+    {
+      "path": "context_for_the_professional.md",
+      "type": "file",
+      "size": 28511,
+      "sha256": "ffb79b3459d7aa75a0b2e18c36d7b93e622dc506577e0bd2d9ed68c720ecebc0"
+    },
+    {
+      "path": "data",
+      "type": "dir"
+    },
+    {
+      "path": "data/1T24_A.pdf",
+      "type": "file",
+      "size": 2312049,
+      "sha256": "846c5fe3442934937ae909666e2f8a99d300b971f50b7188d8547eccd61dc640"
+    },
+    {
+      "path": "data/1T24_Administracin de Riesgos.pdf",
+      "type": "file",
+      "size": 1727029,
+      "sha256": "7eddf874b7a2bf2958a2058f147b80e224155d3f7bf8e0c70c45c694883e7ed2"
+    },
+    {
+      "path": "data/1T25_Administracin de Riesgos Mzo25.pdf",
+      "type": "file",
+      "size": 1109034,
+      "sha256": "18e0fd57c5f540e6b3e6240e6bd10ec529dc1ba80331d0778f053d8864eed5cb"
+    },
+    {
+      "path": "data/1T25_vc.pdf",
+      "type": "file",
+      "size": 1631369,
+      "sha256": "8d7687bad88f54f929f53e229b1a9711ffe4881c024f1d756b0aca02e0c79dba"
+    },
+    {
+      "path": "data/2T24.pdf",
+      "type": "file",
+      "size": 2390702,
+      "sha256": "384deea02a6f1dcdf5a8c24a6d019568e6715ad2c822612e1b0724ebd261ed79"
+    },
+    {
+      "path": "data/2T24_Administracin de Riesgos_.pdf",
+      "type": "file",
+      "size": 1725371,
+      "sha256": "085220aaccf8c0403f5b60e8d68dd1b104b1078156de4c456c73592ee15f43d1"
+    },
+    {
+      "path": "data/2T25_Administracin de Riesgos Jun25.pdf",
+      "type": "file",
+      "size": 1175165,
+      "sha256": "e466e580345a4d3c722e8dd8e09828b9ceb6c1ae52dd1e042a8b7b44d7a7afad"
+    },
+    {
+      "path": "data/2T25_vc_.pdf",
+      "type": "file",
+      "size": 1898389,
+      "sha256": "46f84d52e92075e3918c45648ce72b22b6673416bdc3991dbe044f7d2f145d17"
+    },
+    {
+      "path": "data/3T24.pdf",
+      "type": "file",
+      "size": 2367166,
+      "sha256": "edc8e2732e9c330452346948d787b81be6f76da9cd877e4a0096bc069f34279d"
+    },
+    {
+      "path": "data/3T24_Administracion de Riesgos_.pdf",
+      "type": "file",
+      "size": 1816109,
+      "sha256": "e68bfa7ba2446f9ee8d3eed57cea3a13a02d688bf6a0ac972f5c5c5951f57d74"
+    },
+    {
+      "path": "data/3T25 Reporte Administracion de Riesgos.pdf",
+      "type": "file",
+      "size": 1203444,
+      "sha256": "bd11221d8667123b337917e94ad8cf65a16256a219953ee939bd3b54b6c2d9ac"
+    },
+    {
+      "path": "data/3T25_vc.pdf",
+      "type": "file",
+      "size": 1865745,
+      "sha256": "a0081eb52b7216b54ff19e8d2f06f88e143f985b43075bba8df9e35287c138f6"
+    },
+    {
+      "path": "data/4T24_1.pdf",
+      "type": "file",
+      "size": 2174396,
+      "sha256": "af4a0bd3345b7e9273a3c173a4d2149e1097b96759466a85ee8b83f7a2915316"
+    },
+    {
+      "path": "data/4T24_Administracin de Riesgos.pdf",
+      "type": "file",
+      "size": 1820350,
+      "sha256": "650a51c7b7c6fed2f1cece567914eb1148063a185bf1a6a6dbfdd9e1c7c450c5"
+    },
+    {
+      "path": "data/4T25 Reporte Administracion de Riesgos.pdf",
+      "type": "file",
+      "size": 1240928,
+      "sha256": "ed31145745b1ab6f60f929ea9c582a8805b54676ade977cd7a7d6b3bb6af80c5"
+    },
+    {
+      "path": "data/4T25_v.pdf",
+      "type": "file",
+      "size": 1773776,
+      "sha256": "f3e005d0033b64628083885373a77248c55471bc2b205553a5991cf60aea031e"
+    },
+    {
+      "path": "data/CNBV N 2024 GFNORTE 2_vc.pdf",
+      "type": "file",
+      "size": 26171683,
+      "sha256": "e8184f329ed0e69671fa525bb1921d3f3c3b7dac778f88b9f611fe6601bfe3c5"
+    },
+    {
+      "path": "data/EEFF 2024 Grupo consolidado.pdf",
+      "type": "file",
+      "size": 2862779,
+      "sha256": "b06e88bda3c2a120734284fe1eb71fa031a086a0d518ca32c97ca245fed716c6"
+    },
+    {
+      "path": "data/EEFF 2025 Grupo_.pdf",
+      "type": "file",
+      "size": 3184636,
+      "sha256": "3a23a3a34245a6325d57ae24b107652d6bce6e9cc180271c893a0a5aab8a2f6e"
+    },
+    {
+      "path": "data/IA Banorte ESP_16.pdf",
+      "type": "file",
+      "size": 29368558,
+      "sha256": "ae10076582670d5f4a3b9157d6a2235cff3bb20b866a1fea1d7bb61820178ba0"
+    },
+    {
+      "path": "data/Informe Anual Integrado 2024.pdf",
+      "type": "file",
+      "size": 11825979,
+      "sha256": "626cb71371e725208df1ac1917820bf2edfe8985c5155f4d84903958fab8c04d"
+    },
+    {
+      "path": "data/Reporte Anual - Anexo N 2025 Banco 10.pdf",
+      "type": "file",
+      "size": 11359393,
+      "sha256": "77ebf06d2e6239fe71f571a7eb8c8370078c465eca6986c2451f374d9534c408"
+    },
+    {
+      "path": "data/Reporte Anual - Anexo N 2025 Grupo_vc.pdf",
+      "type": "file",
+      "size": 13370043,
+      "sha256": "7bc1a96908b963fb160d768e841c12c0f6ff315f93192e4ec277df2c056913dc"
+    },
+    {
+      "path": "data/ReporteAnual_AnexoN_Banorte_2024.pdf",
+      "type": "file",
+      "size": 10255429,
+      "sha256": "254d9eb4e6fa495afe3833e3dc6571610678f8fee36c1da16674ab22c79ce2de"
+    },
+    {
+      "path": "estandar_arnes_nativo_ingenieria.md",
+      "type": "file",
+      "size": 141288,
+      "sha256": "409e70ad04fdcbc3d16a95c22445508afe8e3367ad9e4d5eb23f1dde12dc7da9"
+    },
+    {
+      "path": "format_profesional.md",
+      "type": "file",
+      "size": 11224,
+      "sha256": "64a6dc78fbc5e37db110d02678c736402838a7dfacd057e3d6a04186dfb5b1f4"
+    },
+    {
+      "path": "interface_design.md",
+      "type": "file",
+      "size": 14194,
+      "sha256": "d89d07c1132277e3384b97e3d71f491d61aba5b3a92afdf8fd2e159fb89af1d3"
+    },
+    {
+      "path": "professionals_task.md",
+      "type": "file",
+      "size": 15616,
+      "sha256": "72ce26042d583f98c94bd67ba093499bf20c16b295739011ed59b9955cf27988"
+    },
+    {
+      "path": "rol_profesional.md",
+      "type": "file",
+      "size": 6633,
+      "sha256": "5d05d2bbb1cb52dc199c5e471fe6d63a089f4e157fc5dc297b4b15d390ed5a16"
+    },
+    {
+      "path": "technology_stack.md",
+      "type": "file",
+      "size": 16823,
+      "sha256": "39507540791427dfbf59f6818b2f8fb710ef4b1618bf7bdb794317c38c749955"
+    }
+  ]
+}
