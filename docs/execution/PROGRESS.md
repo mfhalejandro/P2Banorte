@@ -11,3 +11,5 @@
 Los 5/14 y 11/14 son mediciones históricas. El 14/14 corresponde al cierre publicado en `5307d2b` y a su confirmación local con los mismos 14 casos. [Informe y recuperación del estado](../quality/ROBUSTEZ_CORPUS_2026-11-19.md) · [Bitácora](EXECUTION_LOG.md)
 
 Las instrucciones de instalación y ejecución se mantienen en el [README](../../README.md). El [sprint](SPRINTS.md) registra qué se verificó para el cierre.
+
+**Mantenimiento posterior al cierre, VERIFIED localmente.** La demo de 24 PDF recuperó API y web en unidades independientes. P0 y SPEC-002 comparten el índice y se seleccionan por consulta en el modo financiero local. [Verificación posterior al cierre](EXECUTION_LOG.md)

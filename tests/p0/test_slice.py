@@ -69,6 +69,35 @@ def test_chat_and_original(corpus):
         assert api.post("/api/chat", json={"message": "Anillos de Saturno"}).json()["status"] == "abstained"
 
 
+def test_definition_requires_the_right_topic_and_preserves_column(corpus):
+    question = {"message": "¿Qué es el riesgo de crédito?"}
+    write_pdf(corpus.data / "Otra definición.pdf", [
+        "Análisis de riesgo de crédito. Se define el incumplimiento a partir de 90 días de mora.",
+    ])
+    corpus.index()
+    with TestClient(create_app(corpus)) as api:
+        result = api.post("/api/chat", json=question).json()
+        assert result["status"] == "abstained" and result["citations"] == []
+
+    with pymupdf.open() as pdf:
+        page = pdf.new_page()
+        page.insert_text((36, 45), "Riesgo de crédito")
+        page.insert_text((290, 45), "Indicador de gestión")
+        page.insert_text((36, 65), "La pérdida potencial por la falta de pago de un")
+        page.insert_text((290, 65), "Mayorista: gestionado a nivel de cartera.")
+        page.insert_text((36, 81), "acreditado o contraparte.")
+        pdf.save(corpus.data / "Informe a columnas.pdf")
+    corpus.index()
+
+    with TestClient(create_app(corpus)) as api:
+        result = api.post("/api/chat", json=question).json()
+        assert result["status"] == "answered"
+        assert result["answer"] == "Riesgo de crédito: La pérdida potencial por la falta de pago de un acreditado o contraparte."
+        citation, = result["citations"]
+        assert citation["filename"] == "Informe a columnas.pdf" and citation["pdf_page"] == 1
+        assert api.get(f'/api/documents/{citation["doc_id"]}/pages/1/image').headers["content-type"] == "image/png"
+
+
 def test_changed_and_escaped_original(corpus, tmp_path):
     old = corpus.catalog()[0]["doc_id"]
     write_pdf(tmp_path / "nuevo.pdf", ["Página distinta."])

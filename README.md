@@ -71,7 +71,7 @@ La evaluación con documentos reales y el estado de cada tarea se conservan en l
 
 ## Demo de comparación financiera local
 
-El modo `financial-local` usa un doble determinista, la calculadora Decimal y las herramientas V3 contra el mismo esquema SQLite de P0. Para una demostración reproducible en otra carpeta, detén la API anterior y ejecuta:
+En el modo `financial-local`, las consultas documentales usan P0. Las peticiones explícitas de comparación o cálculo usan un doble determinista, la calculadora Decimal y las herramientas V3 sobre el mismo índice. Para una demostración reproducible en otra carpeta, detén la API anterior y ejecuta:
 
 ```bash
 demo_dir=$(mktemp -d)
@@ -92,3 +92,24 @@ Con el frontend de desarrollo en marcha, prueba estas preguntas:
 El corte busca etiquetas trimestrales como `3T25` y acumuladas como `9M25`. El primer periodo indicado es la base de cálculo. Prioriza tablas con rótulos verificables de indicador, periodo, entidad, consolidación y unidad. Ante encabezados ambiguos o evidencia insuficiente se abstiene. Para volver a P0, inicia con `LLM_PROVIDER=extractive` y sus rutas habituales. El ciclo con un proveedor generativo real (AC-06) queda pendiente de autorización independiente.
 
 Pruebas dirigidas: `uv run --locked python -B -m pytest -q tests/financial tests/p0`.
+
+### Recuperar la demo con un índice existente
+
+Desde la raíz, configura las rutas del corpus y de su índice SQLite existente. En el ensayo de los 24 PDF, la raíz de datos es `$PWD/docs/requirements/data`. En Linux con systemd de usuario, ejecuta lo siguiente con ambos puertos libres y las dependencias instaladas.
+
+~~~bash
+: "${RAG_DATA_DIR:?Configura la ruta absoluta de los PDF}"
+: "${RAG_STATE_DIR:?Configura la ruta absoluta del índice existente}"
+test -f "$RAG_STATE_DIR/corpus.sqlite3" &&
+systemd-run --user --unit=p2banorte-api --collect --property="WorkingDirectory=$PWD" \
+  --setenv=LLM_PROVIDER=financial-local --setenv="RAG_DATA_DIR=$RAG_DATA_DIR" \
+  --setenv="RAG_STATE_DIR=$RAG_STATE_DIR" \
+  "$PWD/.venv/bin/python" -B -m uvicorn apps.api.main:app --host 127.0.0.1 --port 8194
+systemd-run --user --unit=p2banorte-web --collect --property="WorkingDirectory=$PWD" \
+  --setenv=RESOURCE_BASE_URL=http://127.0.0.1:8194 \
+  "$(command -v node)" "$PWD/apps/web/node_modules/vite/bin/vite.js" \
+  apps/web --host 127.0.0.1 --port 5194 --strictPort
+curl -fsS http://127.0.0.1:8194/api/health
+~~~
+
+Abre http://127.0.0.1:5194. Los dos servicios se pueden reiniciar por separado con `systemctl --user restart` seguido del nombre de la unidad. Para detener ambos, ejecuta `systemctl --user stop p2banorte-web.service p2banorte-api.service`. El arranque abre el índice existente directamente.

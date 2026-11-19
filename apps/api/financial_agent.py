@@ -62,13 +62,28 @@ class Intent:
     output_scale: str | None = None
 
 
+FINANCIAL_VERB = r"(?:compara(?:r)?|calcula(?:r)?|suma(?:r)?(?!\s+(?:de|en|entre)\b))"
+FINANCIAL_CHANGE = r"(?:en\s+)?cu[aá]nto\s+(?:cambi[oó]|vari[oó])"
+FINANCIAL_REQUEST = re.compile(
+    rf"^[\s¿¡]*(?:{FINANCIAL_VERB}\b|{FINANCIAL_CHANGE}\b|"
+    r"(?:(?:cu[aá]l\s+(?:es|fue)\s+)?(?:la\s+|el\s+)?)"
+    r"(?:(?:variaci[oó]n(?:\s+porcentual)?|diferencia|comparaci[oó]n|suma)\s+(?:de|en|entre)|"
+    r"(?:raz[oó]n|ratio)\s+entre)\b)",
+    re.I,
+)
+
+
+def requires_financial_tools(question: str) -> bool:
+    """Una petición explícita de cálculo puede llegar sin sus operandos."""
+    return FINANCIAL_REQUEST.match(question) is not None
+
+
 def parse_intent(question):
     matches = list(PERIOD.finditer(question))
     periods = list(dict.fromkeys(local_period(match) for match in matches))
     prefix = PERIOD.split(question, maxsplit=1)[0].strip(" ¿?!:")
-    prefix = re.sub(r"^(?:en cu[aá]nto cambi[oó] |cuál (?:fue|es) la |calcula(?:r)? |compara(?:r)? |compara(?:r)? la )", "", prefix, flags=re.I)
-    prefix = re.sub(r"^(?:suma\s+(?=(?:el|los|las)\s))", "", prefix, flags=re.I)
-    prefix = re.sub(r"^(?:(?:la |el |los |las )?(?:variación(?: porcentual)?|diferencia|razón|suma|comparación)\s+(?:de |en )(?:la |el |los |las )?|la |el |los |las )", "", prefix, flags=re.I)
+    prefix = re.sub(rf"^(?:{FINANCIAL_CHANGE}|cu[aá]l\s+(?:fue|es)|{FINANCIAL_VERB})\s+", "", prefix, flags=re.I)
+    prefix = re.sub(r"^(?:(?:la |el |los |las )?(?:variación(?: porcentual)?|diferencia|razón|ratio|suma|comparación)\s+(?:de |en |entre )(?:la |el |los |las )?|la |el |los |las )", "", prefix, flags=re.I)
     metric_entity = re.sub(r"\s+(?:entre|del|de|en|para)\s*$", "", prefix, flags=re.I).strip()
     subject = re.search(r"\s+de\s+((?:grupo|banco|gfnorte)\b.*)$", metric_entity, re.I)
     metric, entity = (metric_entity[:subject.start()], subject[1]) if subject else (metric_entity, "")
@@ -78,7 +93,7 @@ def parse_intent(question):
     if "acumulad" in key and all(p.kind == "quarter" for p in periods):
         raise Abstain("Indica el periodo acumulado explícitamente, por ejemplo 9M25.")
     operation: Operation = "difference"
-    for cue, value in (("suma", "sum"), ("razón", "ratio"), ("ratio", "ratio"),
+    for cue, value in (("suma(?:r)?", "sum"), ("razón", "ratio"), ("ratio", "ratio"),
                        ("variación", "percent_change"), ("porcent", "percent_change")):
         if re.search(r"\b" + cue, key):
             operation = value

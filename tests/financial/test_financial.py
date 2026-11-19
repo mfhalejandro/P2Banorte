@@ -3,6 +3,7 @@ from contextlib import closing
 from dataclasses import replace
 from decimal import Decimal
 
+import pymupdf
 import pytest
 from fastapi.testclient import TestClient
 
@@ -31,6 +32,43 @@ def ask(client, question=DIFF):
     return response.json()
 
 
+def test_documentary_suggestions_use_p0_in_financial_mode(corpus, monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "financial-local")
+    with pymupdf.open() as pdf:
+        pdf.new_page().insert_text((55, 55), "El riesgo de crédito es la posibilidad de impago.")
+        pdf.save(corpus.data / "Riesgos.pdf")
+    assert corpus.index()["unique"] == 3
+
+    with TestClient(create_app(corpus)) as api:
+        risk = ask(api, "¿Qué es el riesgo de crédito?")
+        assert risk["provider_mode"] == "extractivo local"
+        assert risk["status"] == "answered" and "posibilidad de impago" in risk["answer"]
+        assert len(risk["citations"]) == 1 and risk["citations"][0]["filename"] == "Riesgos.pdf"
+
+        for question in ("¿Qué políticas de liquidez se mencionan?",
+                         "¿Qué es una razón financiera?",
+                         "¿Qué políticas de liquidez se mencionan entre 3T24 y 3T25?"):
+            result = ask(api, question)
+            assert result["provider_mode"] == "extractivo local"
+            assert result["tools_used"][0] == "search_corpus"
+            assert result["status"] == "abstained" and result["citations"] == []
+            assert "evidencia suficiente" in result["answer"]
+
+
+@pytest.mark.parametrize("question", [
+    "Compara la utilidad neta de Grupo Faro en 3T24",
+    "Calcula la razón de utilidad neta",
+    "¿Cuál fue la variación de la utilidad neta?",
+])
+def test_incomplete_calculation_requests_a_clarification(corpus, monkeypatch, question):
+    monkeypatch.setenv("LLM_PROVIDER", "financial-local")
+    with TestClient(create_app(corpus)) as api:
+        result = ask(api, question)
+    assert result["provider_mode"] == "financiero local (doble)"
+    assert result["status"] == "abstained" and "dos periodos distintos" in result["answer"]
+    assert result["tools_used"] == result["citations"] == []
+
+
 def test_financial_flow_uses_existing_index_and_original_pages(corpus, monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "financial-local")
     with closing(corpus.connect()) as db:
@@ -50,6 +88,8 @@ def test_financial_flow_uses_existing_index_and_original_pages(corpus, monkeypat
             image = api.get(f'/api/documents/{cite["doc_id"]}/pages/2/image')
             assert image.content == corpus.render(cite["doc_id"], 2, 125)
         assert "11.06 %" in ask(api, CHANGE)["answer"]
+        ratio = ask(api, DIFF.replace("Compara la", "Calcula la razón de la"))
+        assert "1.11 veces" in ratio["answer"] and ratio["tools_used"][-1] == "financial_calculator"
         mixed = ask(api, DIFF.replace("3T25", "9M25"))
         assert mixed["status"] == "abstained" and "distinto tipo" in mixed["answer"]
         assert len(mixed["citations"]) == 2

@@ -116,3 +116,18 @@ Codex confirmó el mismo SHA en HEAD, origin/main y `refs/heads/main` del remoto
 | Local, dependencias | `uv lock --check --offline --no-cache --python /usr/bin/python3` y `npm --prefix apps/web ls --depth=0` | PASS · lock Python coherente y dependencias web presentes. |
 
 Se conservó el índice existente durante la verificación. Los resultados 5/14 y 11/14 se mantienen como mediciones históricas en el [informe](../quality/ROBUSTEZ_CORPUS_2026-11-19.md). El alcance de la confirmación es la muestra dirigida. SPEC-002-AC-06 permanece en NOT RUN. Las instrucciones de [instalación y ejecución](../../README.md) y de recuperación y evaluación están en los documentos existentes.
+
+## 2026-11-19 15:31 CDMX · Recuperación y corrección posterior al cierre
+
+La revisión local comenzó en `e7920a5` con HEAD y origin/main alineados y el árbol limpio. El lanzador anterior finalizaba ambos servicios cuando uno salía. El log confirma el cierre de Uvicorn con PID 3851035. Los dos puertos estaban libres al reanudar. API y Vite quedaron activos en 8194 y 5194 como unidades independientes de systemd de usuario. El reinicio de la API conservó el PID de Vite. [Arranque y parada](../../README.md#recuperar-la-demo-con-un-índice-existente)
+
+En `financial-local`, `/api/chat` separa las peticiones financieras explícitas de la consulta documental de P0. Una solicitud de cálculo incompleta pide los operandos que faltan. Para una definición, P0 verifica que el texto corresponda al concepto solicitado y, si está bajo un encabezado de la página original, conserva su columna. Se reutilizó el SQLite existente. Su SHA-256 permaneció idéntico, con 24 PDF cotejados y 34.662 fragmentos.
+
+| Control local | Resultado |
+|---|---|
+| `.venv/bin/python -B -m pytest -p no:cacheprovider -q tests/p0 tests/financial tests/harness` | PASS · 46 pruebas y 5 subcasos. Aviso preexistente de Starlette. |
+| `npm run smoke` en `apps/web` | PASS · 6 pruebas de Chromium. |
+| `PYTHONPATH=. .venv/bin/python -B tests/financial/evaluate_robustness.py` con el índice existente | PASS · 14/14 iguales a la línea base en estado HTTP, respuesta, citas y herramientas. 8 cálculos, 6 abstenciones y 25/25 PNG válidos. |
+| Chromium contra 5194 y verificación de salud en 8194 | PASS · Biblioteca de 24 documentos. Riesgo de crédito y políticas de liquidez con evidencia de P0. Comparación GFNorte 2T24 a 3T24 de +220 millones de pesos con dos citas. Solicitud incompleta con aclaración y trimestre frente a acumulado con abstención. Seis citas abiertas en el visor. |
+
+Las métricas del simulacro cerrado se conservan. AC-06 permanece NOT RUN. La corrección se verificó localmente.

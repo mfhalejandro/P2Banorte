@@ -38,3 +38,9 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | Proveedor generativo real | SPEC-002-AC-06 | Autorización independiente pendiente | NOT RUN |
 
 [Resultados finales y reproducción](ROBUSTEZ_CORPUS_2026-11-19.md#cierre-publicado-en-5307d2b)
+
+## Corrección posterior al cierre
+
+| Criterio | Evidencia | Resultado |
+|---|---|---|
+| SPEC-001-AC-01/03/06, SPEC-002-AC-01/03/05 | Regresiones de enrutamiento, definiciones con columna, aclaración y comparabilidad. Chromium con 24 PDF y seis citas abiertas. Cotejo de los 14 casos financieros con el cierre. | VERIFIED localmente. [Bitácora](../execution/EXECUTION_LOG.md) |

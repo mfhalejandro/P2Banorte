@@ -1,12 +1,13 @@
 """Agente extractivo local. El proveedor elige entre evidencias leídas por las herramientas."""
 import asyncio
 import re
+from functools import partial
 from typing import Literal, Protocol
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from .corpus import Citation, Corpus, SearchRequest, asks_definition, terms
+from .corpus import Citation, Corpus, SearchRequest, DEFINITION_LEAD, definition_topic, terms
 
 
 class ChatRequest(BaseModel):
@@ -36,8 +37,7 @@ class LocalExtractive:
         if not evidence:
             return None
         best = max(evidence, key=lambda item: sentence_score(question, passage(question, item.snippet)))
-        score = sentence_score(question, passage(question, best.snippet))
-        if asks_definition(question) and not score[1]:
+        if definition_topic(question) and not sentence_score(question, passage(question, best.snippet))[0]:
             return None
         return best.evidence_id
 
@@ -47,12 +47,15 @@ class ProviderUnavailable(Exception):
 
 
 def sentence_score(question, sentence):
-    wanted = set(terms(question))
-    overlap = len(wanted.intersection(terms(sentence)))
-    definition = asks_definition(question) and any(
-        cue in sentence.casefold() for cue in ("se refiere", "se define", "consiste", "es la posibilidad", " es el ", " es una ", " es un ", " es la ")
-    )
-    return overlap, definition
+    topic = definition_topic(question)
+    wanted = terms(topic or question)
+    overlap = len(set(wanted).intersection(terms(sentence)))
+    if not topic or not wanted or overlap != len(wanted):
+        return False, overlap
+    heading, colon, body = sentence.partition(": ")
+    under_heading = bool(colon and terms(heading) == wanted and DEFINITION_LEAD.match(body))
+    inline = re.split(r"\s+(?:se refiere |se define |consiste |es (?:el|la|un|una) )", sentence, maxsplit=1, flags=re.I)
+    return under_heading or (len(inline) == 2 and terms(inline[0]) == wanted), overlap
 
 
 def passage(question, body):
@@ -83,8 +86,10 @@ class Agent:
         async with asyncio.timeout(self.timeout):
             found = await call("search_corpus", self.corpus.search_corpus, SearchRequest(query=question))
             observed = {}
+            topic = definition_topic(question)
+            read_source = partial(self.corpus.read_source, topic=topic) if topic else self.corpus.read_source
             for ref in found[:4]:
-                citation = await call("read_source", self.corpus.read_source, ref)
+                citation = await call("read_source", read_source, ref)
                 observed[citation.evidence_id] = citation
             if observed:
                 selected = await self.provider.select(question, list(observed.values()))

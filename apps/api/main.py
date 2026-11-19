@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Path, Query, Response
 
 from .agent import Agent, ChatRequest, ChatResponse, LocalExtractive, ProviderUnavailable
 from .corpus import Corpus
-from .financial_agent import FinancialAgent
+from .financial_agent import FinancialAgent, requires_financial_tools
 
 
 def create_app(corpus=None, provider=None, financial_provider=None):
@@ -14,10 +14,12 @@ def create_app(corpus=None, provider=None, financial_provider=None):
     async def lifespan(app):
         app.state.corpus = corpus or Corpus.configured()
         mode = os.getenv("LLM_PROVIDER", "extractive")
-        if financial_provider is not None or (provider is None and mode == "financial-local"):
-            app.state.agent = FinancialAgent(app.state.corpus, provider=financial_provider)
-        else:
-            app.state.agent = Agent(app.state.corpus, provider or LocalExtractive())
+        app.state.documentary_agent = Agent(app.state.corpus, provider or LocalExtractive())
+        app.state.financial_enabled = financial_provider is not None or (provider is None and mode == "financial-local")
+        app.state.agent = (
+            FinancialAgent(app.state.corpus, provider=financial_provider)
+            if app.state.financial_enabled else app.state.documentary_agent
+        )
         app.state.provider_available = (
             provider is not None or financial_provider is not None or mode in {"extractive", "financial-local"}
         )
@@ -41,8 +43,11 @@ def create_app(corpus=None, provider=None, financial_provider=None):
             raise HTTPException(422, "Escribe una pregunta.")
         if not app.state.provider_available:
             raise HTTPException(503, "El proveedor configurado no está disponible en este entorno.")
+        agent = app.state.agent
+        if app.state.financial_enabled and not requires_financial_tools(question):
+            agent = app.state.documentary_agent
         try:
-            return await app.state.agent.answer(question)
+            return await agent.answer(question)
         except (TimeoutError, ProviderUnavailable, ConnectionError, OSError) as exc:
             raise HTTPException(503, "No se pudo completar la consulta. Vuelve a intentarlo.") from exc
         except KeyError as exc:

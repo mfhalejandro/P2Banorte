@@ -46,8 +46,45 @@ def terms(text):
                               if t not in STOP and len(t) > 1))
 
 
-def asks_definition(question):
-    return bool(re.search(r"\b(qué es|qué significa|cómo se define)\b", question.casefold()))
+DEFINITION_PROMPT = re.compile(r"\b(?:qu[eé] es|qu[eé] significa|c[oó]mo se define)\b", re.I)
+DEFINITION_LEAD = re.compile(
+    r"^(?:es (?:la|el|una|un) |se refiere |se define |consiste |"
+    r"(?:la |el )?(?:p[eé]rdida potencial|posibilidad|probabilidad)\b)", re.I,
+)
+
+
+def definition_topic(question):
+    prompt = DEFINITION_PROMPT.search(question)
+    if not prompt:
+        return ""
+    tail = question[prompt.end():]
+    return " ".join(re.findall(r"[^\W_]+", re.sub(r"^\s*(?:la|el|las|los|una|un)\s+", "", tail, flags=re.I))[:18])
+
+
+def definition_under_heading(page, topic):
+    wanted = terms(topic)
+    blocks = page.get_text("dict", flags=pymupdf.TEXTFLAGS_DICT & ~pymupdf.TEXT_PRESERVE_IMAGES)["blocks"]
+    lines = [
+        (*line["bbox"], " ".join("".join(span["text"] for span in line["spans"]).split()))
+        for block in blocks for line in block.get("lines", []) if line["dir"] == (1.0, 0.0)
+    ]
+    for left, _, _, bottom, title in lines:
+        if terms(title) != wanted:
+            continue
+        below = sorted(
+            (line for line in lines if abs(line[0] - left) <= 8 and line[1] >= bottom),
+            key=lambda line: line[1],
+        )
+        statement = []
+        for _, top, _, end, line in below[:6]:
+            if top - bottom > 28 or (not statement and not DEFINITION_LEAD.match(line)):
+                break
+            statement.append(line)
+            bottom = end
+            sentence = re.match(r".+?[.!?](?=\s|$)", " ".join(statement))
+            if sentence:
+                return f"{title}: {sentence[0]}"
+    return None
 
 
 def fragments(page):
@@ -177,15 +214,21 @@ class Corpus:
         tokens = terms(request.query)[:18]
         if not tokens:
             return []
-        ranking_terms = tokens
-        if asks_definition(request.query):
-            ranking_terms = tokens + ["refiere", "define", "consiste"]
-        expression = " OR ".join(f'"{t}"' for t in ranking_terms)
+        topic = definition_topic(request.query)
+        expressions = []
+        if topic:
+            cues = ("se refiere a", "se define como", "consiste en", "es la posibilidad", "es la probabilidad", "pérdida potencial")
+            expressions.append(" OR ".join(f'NEAR("{topic}" "{cue}", 12)' for cue in cues))
+        expressions.append(" OR ".join(f'"{t}"' for t in tokens))
         with closing(self.connect()) as db:
-            rows = db.execute("""
-                SELECT doc, page, fragment, body FROM chunks WHERE chunks MATCH ?
-                ORDER BY bm25(chunks) ASC, doc, page, fragment LIMIT ?
-            """, (expression, request.top_k * 4)).fetchall()
+            rows = [
+                row
+                for expression in expressions
+                for row in db.execute("""
+                    SELECT doc, page, fragment, body FROM chunks WHERE chunks MATCH ?
+                    ORDER BY bm25(chunks) ASC, doc, page, fragment LIMIT ?
+                """, (expression, request.top_k * 4))
+            ]
         # Rechazar coincidencias débiles antes de presentarlas como evidencia.
         required = math.ceil(len(tokens) * 0.8)
         required_numbers = {t for t in tokens if any(c.isdigit() for c in t)}
@@ -193,12 +236,14 @@ class Corpus:
         for row in rows:
             common = set(tokens).intersection(terms(row["body"]))
             if len(common) >= required and required_numbers <= common:
-                matches.append(SourceRef(doc_id=row["doc"], pdf_page=row["page"], fragment=row["fragment"]))
+                ref = SourceRef(doc_id=row["doc"], pdf_page=row["page"], fragment=row["fragment"])
+                if ref not in matches:
+                    matches.append(ref)
             if len(matches) == request.top_k:
                 break
         return matches
 
-    def read_source(self, ref: SourceRef):
+    def read_source(self, ref: SourceRef, *, topic=""):
         with closing(self.connect()) as db:
             row = db.execute("""
                 SELECT body
@@ -206,9 +251,14 @@ class Corpus:
             """, (ref.doc_id, ref.pdf_page, ref.fragment)).fetchone()
         if not row:
             raise KeyError("Evidencia desconocida")
-        name, _ = self.original(ref.doc_id)
+        name, data = self.original(ref.doc_id)
+        body = row["body"]
+        if topic:
+            with PDF_LOCK, pymupdf.open(stream=data, filetype="pdf") as pdf:
+                definition = definition_under_heading(pdf[ref.pdf_page - 1], topic)
+            body = definition or body
         return Citation(doc_id=ref.doc_id, filename=name, pdf_page=ref.pdf_page,
-                        evidence_id=f"{ref.doc_id}:{ref.pdf_page}:{ref.fragment}", snippet=row["body"])
+                        evidence_id=f"{ref.doc_id}:{ref.pdf_page}:{ref.fragment}", snippet=body)
 
     def original(self, doc):
         with closing(self.connect()) as db:
