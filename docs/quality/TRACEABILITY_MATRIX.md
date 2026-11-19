@@ -26,3 +26,5 @@ Al aprobar una spec, añadir su identificador y plan a las filas correspondiente
 | PRD AC-02/03/08/10/25–27 | SPEC-002-AC-04 | T-02/T-13/T-14/T-16, dos corpus ficticios, recuperación ante interrupción y ensayo progresivo sobre 24 PDF | PASS local |
 | PRD AC-16/18/19 | SPEC-002-AC-05 | T-09, consulta y PNG sobre estado previo de P0 sin migración | PASS local |
 | PRD AC-19 y AC-21 | SPEC-002-AC-06 | T-10, ciclo sintético con proveedor real | NOT RUN, autorización independiente pendiente |
+
+La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la evidencia de SPEC-002 en AC-01 a AC-05. Registra por separado exactitud, abstenciones y cobertura de tablas pendientes. AC-06 sigue en NOT RUN.

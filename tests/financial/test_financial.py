@@ -195,3 +195,54 @@ def test_existing_index_can_open_during_ingestion(corpus):
         writer.execute("DELETE FROM files")
         assert Corpus(corpus.data, corpus.db.parent).catalog() == expected
         writer.rollback()
+
+
+def test_requested_currency_cannot_be_silently_ignored(corpus):
+    report(corpus.data / "C-alternativo.pdf", ("3T25", "9M25"), ("123.40", "310.10"),
+           note="Hay una reexpresión por cambio de perímetro.")
+    corpus.index()
+    with TestClient(create_app(corpus, financial_provider=LocalToolDouble())) as api:
+        result = ask(api, DIFF + " en dólares")
+        assert result["status"] == "abstained"
+        assert "moneda solicitada" in result["answer"] and "A − B" not in result["answer"]
+        assert not result["warnings"] and "perímetro" not in result["answer"]
+        result = ask(api, DIFF + " en millones de MXN")
+        assert result["status"] == "answered" and "12.29" in result["answer"]
+
+
+def test_natural_difference_question_keeps_requested_entity(corpus):
+    with TestClient(create_app(corpus, financial_provider=LocalToolDouble())) as api:
+        result = ask(api, "¿En cuánto cambió la utilidad neta de Grupo Faro de 3T24 a 3T25?")
+    assert result["status"] == "answered" and "12.29" in result["answer"]
+
+
+@pytest.mark.parametrize("different_definition", [False, True])
+def test_numbered_rate_footnote_controls_cross_document_comparison(corpus, different_definition):
+    definition = "Utilidad neta / promedio del capital mayoritario"
+    report(corpus.data / "A-base.pdf", ("3T24", "9M24"), ("111.11", "280.05"),
+           roe_definition=definition, roe_values=("22.9%", "18.0%"))
+    report(corpus.data / "B-consultado.pdf", ("3T25", "9M25"), ("123.40", "310.10"),
+           roe_definition=definition if not different_definition else "Utilidad neta / capital de cierre",
+           roe_values=("23.6%", "18.1%"))
+    corpus.index()
+    with TestClient(create_app(corpus, financial_provider=LocalToolDouble())) as api:
+        answer = ask(api, DIFF.replace("la utilidad neta", "ROE"))
+    if different_definition:
+        assert answer["status"] == "abstained" and "definición" in answer["answer"]
+    else:
+        assert answer["status"] == "answered"
+        assert "0.7 puntos porcentuales" in answer["answer"] and "% %" not in answer["answer"]
+        assert {item["filename"] for item in answer["citations"]} == {"A-base.pdf", "B-consultado.pdf"}
+        assert all(item["pdf_page"] == 2 and "ROE (2)" in item["snippet"] for item in answer["citations"])
+
+
+def test_abstention_cites_reexpression_without_using_flagged_operand(corpus):
+    report(corpus.data / "B-consultado.pdf", ("3T25", "9M25"), ("123.40", "310.10"),
+           note="La desconsolidación de Bineo cambia la base de las cifras.")
+    corpus.index()
+    with TestClient(create_app(corpus, financial_provider=LocalToolDouble())) as api:
+        result = ask(api)
+    assert result["status"] == "abstained" and "cambio de perímetro" in result["answer"]
+    assert "123.40" not in result["answer"]
+    assert any(c["filename"] == "B-consultado.pdf" and c["pdf_page"] == 2 and c["evidence_id"].endswith(":nota")
+               for c in result["citations"])

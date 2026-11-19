@@ -85,3 +85,9 @@ El solicitante aprobó SPEC-002 v1 para AC-01 a AC-05 y difirió expresamente AC
 Regresión final: `python -B -m pytest -p no:cacheprovider -q tests/financial tests/p0 tests/harness`, 31 pruebas y 5 subcasos pasaron en 11.68 s. Se registró un aviso de deprecación de Starlette en el cliente de pruebas. La demo conserva el frontend de P0.
 
 En el árbol compartido pasaron el gate de especificación, la integridad RCTF, el control automático de publicación y `git diff --check`. La demo se inició en loopback (web 5194, API 8194) con los 24 PDF del ensayo. Chromium a 375 px verificó allí el resultado real de 220 y decodificó la imagen de la página 5 al abrir cada cita.
+
+## 2026-11-19 · Robustez de SPEC-002
+
+Codex reanudó en `47925143cef894b8f1d40e884d2d4b85799a594e`, con árbol e índice limpios y coincidencia de HEAD con origin/main. Pasaron integridad y gate de especificación. Se reutilizó el índice de ensayo: 24 SHA cotejados, 5.899 páginas declaradas y 34.662 fragmentos. Se midieron las mismas 14 preguntas antes y después, con evaluación y cotejo local. [Protocolo de evaluación y resultados](../quality/ROBUSTEZ_CORPUS_2026-11-19.md)
+
+El corte final pasó 36 pruebas, 5 subcasos y 1 aviso de deprecación de Starlette en 16,36 s con `.venv/bin/python -B -m pytest -p no:cacheprovider -q tests/financial tests/p0 tests/harness`. Aciertos completos 11/14 y 21/21 páginas citadas abrieron sus PNG. La rama de extracción local y el índice de P0 conservan su contrato. AC-06 quedó en NOT RUN.

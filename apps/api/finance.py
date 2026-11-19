@@ -54,6 +54,7 @@ class Operand:
     note: str | None = None
     note_citation: Citation | None = None
     additive: bool = False
+    definition: str | None = None
 
 
 def normalize(text):
@@ -88,7 +89,12 @@ def calculate(operation: Operation, base: Operand, current: Operand) -> tuple[De
     if (base.period.kind, base.period.months) != (current.period.kind, current.period.months):
         raise Abstain("Los periodos tienen distinto tipo o duración, por ejemplo trimestre frente a acumulado.")
     if (base.unit.name, base.unit.currency) != (current.unit.name, current.unit.currency):
+        currency_a, currency_b = base.unit.currency or "", current.unit.currency or ""
+        if ":" in currency_a and ":" in currency_b and currency_a.split(":", 1)[0] == currency_b.split(":", 1)[0]:
+            raise Abstain("La moneda común no está acreditada entre las fuentes; la leyenda de cada tabla solo aplica a sus propias cifras.")
         raise Abstain("Las unidades o monedas de los operandos son incompatibles.")
+    if base.definition != current.definition:
+        raise Abstain("Las notas de las fuentes no acreditan la misma definición del indicador.")
     if base.note or current.note:
         if not base.comparable_basis or base.comparable_basis != current.comparable_basis:
             raise Abstain("La fuente advierte una reexpresión o cambio de perímetro sin una base común verificada.")

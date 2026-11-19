@@ -5,16 +5,17 @@ from pathlib import Path
 import pymupdf
 
 
-def report(path, periods, values, *, entity="Grupo Faro", unit="millones MXN", note="", duplicate_header=False):
+def report(path, periods, values, *, entity="Grupo Faro", unit="millones MXN", note="",
+           duplicate_header=False, roe_definition=None, roe_values=("11.0%", "12.5%")):
     with pymupdf.open() as pdf:
         pdf.new_page().insert_text((55, 55), "Documento de prueba. Grupo ficticio.")
         page = pdf.new_page()
         page.insert_textbox((55, 38, 525, 81), f"{entity} consolidado | {unit}\nMagnitud aditiva: Utilidad neta")
         rows = [
-            ["Indicador", *periods],
+            [f"Indicadores Financieros {entity}" if roe_definition else "Indicador", *periods],
             ["Utilidad neta", *values],
             ["Reservas", values[1], values[0]],
-            ["ROE", "11.0%", "12.5%"],
+            ["ROE (2)" if roe_definition else "ROE", *roe_values],
         ]
         if duplicate_header:
             rows[0][-1] = rows[0][-2]
@@ -26,8 +27,10 @@ def report(path, periods, values, *, entity="Grupo Faro", unit="millones MXN", n
         for row_index, row in enumerate(rows):
             for col_index, value in enumerate(row):
                 page.insert_text((xs[col_index] + 6, ys[row_index] + 18), value)
+        if roe_definition:
+            page.insert_text((55, 220), f"2. ROE= {roe_definition}", fontsize=10)
         if note:
-            page.insert_textbox((55, 224, 520, 280), note)
+            page.insert_textbox((55, 230, 520, 280), note)
         pdf.save(path)
 
 

@@ -9,9 +9,9 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .agent import ChatResponse, ProviderUnavailable
-from .corpus import Corpus, SourceRef
+from .corpus import Citation, Corpus, SourceRef
 from .finance import Abstain, Operand, Operation, PERIOD, Period, calculate, display, local_period, normalize
-from .financial_evidence import find_candidates, read_operand
+from .financial_evidence import CURRENCY, UnverifiedBasis, currency_key, find_candidates, read_operand
 
 ToolName = Literal["list_documents", "search_corpus", "read_source", "financial_calculator", "inspect_page_visual"]
 
@@ -58,14 +58,17 @@ class Intent:
     current: Period
     operation: Operation
     inspect: bool
+    output_currency: str | None = None
+    output_scale: str | None = None
 
 
 def parse_intent(question):
-    periods = list(dict.fromkeys(local_period(match) for match in PERIOD.finditer(question)))
+    matches = list(PERIOD.finditer(question))
+    periods = list(dict.fromkeys(local_period(match) for match in matches))
     prefix = PERIOD.split(question, maxsplit=1)[0].strip(" ¿?!:")
-    prefix = re.sub(r"^(?:cuál (?:fue|es) la |calcula(?:r)? |compara(?:r)? |compara(?:r)? la )", "", prefix, flags=re.I)
+    prefix = re.sub(r"^(?:en cu[aá]nto cambi[oó] |cuál (?:fue|es) la |calcula(?:r)? |compara(?:r)? |compara(?:r)? la )", "", prefix, flags=re.I)
     prefix = re.sub(r"^(?:(?:la |el )?(?:variación(?: porcentual)?|diferencia|razón|suma|comparación)\s+(?:de |en )(?:la |el )?|la |el )", "", prefix, flags=re.I)
-    metric_entity = re.sub(r"\s+(?:entre|del|en|para)\s*$", "", prefix, flags=re.I).strip()
+    metric_entity = re.sub(r"\s+(?:entre|del|de|en|para)\s*$", "", prefix, flags=re.I).strip()
     metric, marker, entity = metric_entity.partition(" de ")
     if not marker or not re.match(r"(?:grupo|banco|gfnorte)\b", entity, re.I):
         metric, entity = metric_entity, ""
@@ -80,7 +83,16 @@ def parse_intent(question):
         if re.search(r"\b" + cue, key):
             operation = value
             break
-    return Intent(metric, entity or None, *periods, operation, "inspecciona" in key)
+    ending = question[matches[-1].end():]
+    requested_unit = re.search(r"\ben\s+", ending, re.I)
+    currency, scale = None, None
+    if requested_unit:
+        match = CURRENCY.match(ending, requested_unit.end())
+        if match:
+            scale, name = match.groups()
+            currency = currency_key(name)
+            scale = scale.lower() if scale else None
+    return Intent(metric, entity or None, *periods, operation, "inspecciona" in key, currency, scale)
 
 
 @dataclass
@@ -91,6 +103,7 @@ class Trace:
     attempted: dict[str, set[tuple[str, int]]] = field(default_factory=dict)
     observed: dict[str, Operand] = field(default_factory=dict)
     rejected: dict[str, str] = field(default_factory=dict)
+    basis_warnings: dict[str, tuple[str, Citation | None]] = field(default_factory=dict)
     result: tuple[Operand, Operand, tuple[Decimal, str, str]] | None = None
     inspected: bool = False
 
@@ -111,14 +124,17 @@ class LocalToolDouble:
             label = period.label
             attempted = trace.attempted.get(label, set())
             for ref in trace.searched[label]:
-                if len(attempted) >= 3:
+                found = any(item.period == period for item in trace.observed.values())
+                if len(attempted) >= (3 if found or intent.inspect else 4):
                     break
                 if (ref.doc_id, ref.pdf_page) not in attempted:
                     return ToolCall(name="read_source", arguments={"period": label, "ref": ref.model_dump()})
         missing = [p.label for p in periods if not any(item.period == p for item in trace.observed.values())]
         if missing:
-            raise Abstain(" ".join(f"{label}: {trace.rejected.get(label, 'no se encontró evidencia').rstrip('.')}."
-                                   for label in missing))
+            reasons = [f"{label}: "
+                       f"{trace.basis_warnings.get(label, (trace.rejected.get(label, 'no se encontró evidencia'), None))[0]}"
+                       for label in missing]
+            raise Abstain(". ".join(reason.rstrip(".") for reason in reasons) + ".")
         base, current = self.choose_pair(intent, trace.observed)
         if intent.inspect and not trace.inspected:
             return ToolCall(name="inspect_page_visual", arguments={"source_id": current})
@@ -148,7 +164,7 @@ class LocalToolDouble:
             context.prec = 50
             signatures = {(normalize(p.entity), p.unit.name, (p.unit.currency or "").split(":", 1)[0],
                            p.value * p.unit.scale,
-                           normalize(p.basis), p.note, p.comparable_basis) for _, p in candidates}
+                           normalize(p.basis), p.note, p.comparable_basis, p.definition) for _, p in candidates}
         if len(signatures) != 1:
             raise Abstain(f"{period.label}: las fuentes disponibles muestran cifras o bases incompatibles.")
         return candidates[0][0]
@@ -208,6 +224,8 @@ class FinancialAgent:
                     raise Abstain("La entidad de la fuente difiere de la solicitada.")
             except (RuntimeError, OSError):
                 trace.rejected[params.period] = "No se pudo leer la página original."
+            except UnverifiedBasis as exc:
+                trace.basis_warnings.setdefault(params.period, (str(exc), exc.citation))
             except Abstain as exc:
                 trace.rejected[params.period] = str(exc)
             else:
@@ -226,7 +244,19 @@ class FinancialAgent:
             if (not base or not current or params.operation != intent.operation
                     or base.period != intent.base or current.period != intent.current):
                 raise Abstain("La calculadora requiere ambos operandos verificados para la operación solicitada.")
+            if intent.output_currency:
+                actual = (current.unit.currency or "").split(":", 1)[0]
+                if actual != intent.output_currency:
+                    raise Abstain("La evidencia no acredita la moneda solicitada. Indica una moneda respaldada por los originales.")
+                if intent.output_scale and not current.unit.label.lower().startswith(intent.output_scale):
+                    raise Abstain("El cálculo está respaldado en otra escala. Consulta en la escala indicada en las fuentes.")
             trace.result = base, current, calculate(params.operation, base, current)
+
+    @staticmethod
+    def operand_text(operand):
+        if operand.unit.label == "%" and "%" in operand.original:
+            return operand.original
+        return f"{operand.original} {operand.unit.label}"
 
     def response(self, trace, reason=None):
         warnings = []
@@ -240,10 +270,20 @@ class FinancialAgent:
                 except Abstain:
                     continue
                 item = trace.observed[source]
-                answer += f" {period.label}: {item.original} {item.unit.label} ({item.entity})."
+                answer += f" {period.label}: {self.operand_text(item)} ({item.entity})."
                 citations[item.citation.evidence_id] = item.citation
-                if item.note_citation:
+            established = {period.label for period in per_period}
+            for label, (warning, citation) in trace.basis_warnings.items():
+                if label not in established:
+                    warnings.append(warning)
+                    if citation:
+                        citations[citation.evidence_id] = citation
+            for item in trace.observed.values():
+                if item.note and item.note_citation:
+                    warnings.append(item.note)
                     citations[item.note_citation.evidence_id] = item.note_citation
+            if warnings and "cambio de perímetro" not in reason:
+                answer += " " + warnings[0]
         else:
             base, current, (value, unit, formula) = trace.result
             conversion = ""
@@ -253,8 +293,8 @@ class FinancialAgent:
                     normalized = base.value * base.unit.scale / current.unit.scale
                 conversion = f" B equivale a {normalized:f} {current.unit.label}."
             answer = (f"{current.metric} · {current.entity}. "
-                      f"Base B ({base.period.label}): {base.original} {base.unit.label}."
-                      f"{conversion} Periodo A ({current.period.label}): {current.original} {current.unit.label}. "
+                      f"Base B ({base.period.label}): {self.operand_text(base)}."
+                      f"{conversion} Periodo A ({current.period.label}): {self.operand_text(current)}. "
                       f"{formula} = {display(value)} {unit}.")
             for item in (base, current):
                 citations[item.citation.evidence_id] = item.citation

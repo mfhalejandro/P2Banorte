@@ -8,13 +8,21 @@ import pymupdf
 from .corpus import Corpus, PDF_LOCK, SourceRef, terms
 from .finance import Abstain, Operand, PERIOD, Period, Unit, decimal_from_source, local_period, normalize
 
-ENTITY = re.compile(r"(?im)^(?:entidad\s*:\s*([^\n|]+)|((?:grupo|banco)\s+[^\n|]+?)\s+(?:no\s+)?consolidad[oa]\b|(GFNorte)\s*[-–])")
+ENTITY = re.compile(r"(?im)^\s*(?:tabla comparativa\s*[-–]\s*)?(?:entidad\s*:\s*([^\n|]+)|((?:grupo|banco)\s+[^\n|]+?)\s+(?:no\s+)?consolidad[oa]\b|(GFNorte)\s*[-–,])")
 BASIS = re.compile(r"\b(?:no\s+)?consolidad[oa](?:\s+con\s+subsidiarias)?\b", re.I)
-CURRENCY = re.compile(r"\b(?:(millones|miles)(?:\s+de)?\s+)?(MXN|USD|EUR|pesos(?:\s+mexicanos)?|dólares(?:\s+estadounidenses)?|euros)\b", re.I)
+CURRENCY = re.compile(r"\b(?:(millones|miles)(?:\s+de)?\s+)?(MXN|USD|EUR|pesos(?:\s+mexicanos)?|d[oó]lares(?:\s+estadounidenses)?|euros)\b", re.I)
 NOTE = re.compile(r"\b(?:desconsolida\w*|reexpres\w*|cambio de perímetro|operaciones discontinuadas)\b", re.I)
 COMMON = re.compile(r"(?im)^base comparable\s*:\s*([^\n|]+)")
 ADDITIVE = re.compile(r"(?im)^magnitud aditiva\s*:\s*([^\n|]+)")
 TABULAR_LINES = re.compile(r"\s+")
+INDICATORS = re.compile(r"indicadores financieros\s+([^\n|]+)", re.I)
+ROW_NOTE = re.compile(r"\s+\((\d{1,2})\)\s*$")
+
+
+class UnverifiedBasis(Abstain):
+    def __init__(self, reason, citation):
+        super().__init__(reason)
+        self.citation = citation
 
 
 def find_candidates(corpus: Corpus, metric: str, period: Period, other: Period | None = None):
@@ -23,6 +31,7 @@ def find_candidates(corpus: Corpus, metric: str, period: Period, other: Period |
     if not tokens:
         return []
     pattern = " AND ".join(f'"{token}"' for token in tokens[:16])
+    short_indicator = len(tokens) == 1 and len(tokens[0]) <= 5
     with closing(corpus.connect()) as db:
         rows = db.execute("""
             SELECT doc, page, fragment, body FROM chunks WHERE chunks MATCH ?
@@ -33,6 +42,10 @@ def find_candidates(corpus: Corpus, metric: str, period: Period, other: Period |
             SELECT doc, page, body FROM chunks WHERE chunks MATCH ?
             ORDER BY bm25(chunks) ASC LIMIT 600
         """, ('"consolidado" OR "consolidada"',)).fetchall()
+        indicator_pages = db.execute("""
+            SELECT doc, page, body FROM chunks WHERE chunks MATCH ?
+            ORDER BY bm25(chunks) ASC LIMIT 300
+        """, ('"indicadores financieros"',)).fetchall() if short_indicator else []
     pages = {}
     header_scores = {}
     for row in headings:
@@ -41,6 +54,11 @@ def find_candidates(corpus: Corpus, metric: str, period: Period, other: Period |
             key = (row["doc"], row["page"])
             score = 1 + int(other in codes) + int(bool(CURRENCY.search(row["body"])))
             header_scores[key] = max(score, header_scores.get(key, 0))
+    for row in indicator_pages:
+        codes = {local_period(m) for m in PERIOD.finditer(row["body"])}
+        if period in codes:
+            key = (row["doc"], row["page"])
+            header_scores[key] = 4 + int(other in codes)
     for row in rows:
         key = (row["doc"], row["page"])
         codes = {local_period(m) for m in PERIOD.finditer(row["body"])}
@@ -52,6 +70,12 @@ def find_candidates(corpus: Corpus, metric: str, period: Period, other: Period |
     return [ref for _, ref in sorted(pages.values(), key=lambda item: -item[0])][:8]
 
 
+def currency_key(name):
+    key = normalize(name)
+    return {"pesos mexicanos": "MXN", "dolares estadounidenses": "USD", "dolares": "dólares",
+            "euros": "EUR", "pesos": "pesos"}.get(key, key.upper())
+
+
 def unit_from_context(text, original, scope):
     if original.rstrip().rstrip(")").endswith("%"):
         return Unit("tasa", None, Decimal(1), "%")
@@ -59,36 +83,60 @@ def unit_from_context(text, original, scope):
     if len(matches) != 1:
         raise Abstain("La unidad o moneda de la cifra es ambigua.")
     scale, currency = matches.pop()
-    if currency == "pesos":
-        # Una leyenda compartida de tabla prueba unidad común aunque omita el código ISO.
-        code = "pesos:" + scope
-    else:
-        code = {"pesos mexicanos": "MXN", "dólares estadounidenses": "USD", "euros": "EUR"}.get(currency, currency.upper())
-        if code == "DÓLARES":
-            code = "dólares:" + scope
+    code = currency_key(currency)
+    if code in {"pesos", "dólares"}:
+        # La leyenda de una tabla aplica únicamente a sus propios operandos.
+        code = f"{code}:{scope}"
     label = f"{scale} de {currency}" if scale else currency
     return Unit("moneda", code, Decimal({"millones": 1_000_000, "miles": 1000, "": 1}[scale]), label)
 
 
-def make_operand(citation, metric, period, original, context, notes, scope, comma_grouping, note_citation):
+def make_operand(citation, metric, period, original, context, notes, scope, comma_grouping, note_citation,
+                 *, indicators=None, definition=None):
     entities = {normalize(next(group for group in m.groups() if group)): next(group for group in m.groups() if group)
                 for m in ENTITY.finditer(context)}
     bases = {normalize(m.group()): m.group() for m in BASIS.finditer(context)}
+    if indicators and definition:
+        if entities and set(entities) != {normalize(indicators)}:
+            raise Abstain("El encabezado y la sección de indicadores identifican entidades distintas.")
+        entities = {normalize(indicators): indicators}
+        bases = {"indicadores": "indicadores financieros con metodología explícita"}
     if len(entities) != 1 or len(bases) != 1:
         raise Abstain("La entidad o la base de consolidación no se puede identificar inequívocamente.")
     note = "La fuente advierte una reexpresión o cambio de perímetro." if NOTE.search(notes) else None
     basis = COMMON.search(notes)
+    if note and not basis:
+        # Nombrar un evento solo cuando el sustantivo y la entidad figuran juntos.
+        has_bineo_note = re.search(r"desconsolida\w*\s+de\s+Bineo\b", notes, re.I)
+        subject = " (Bineo)" if has_bineo_note else ""
+        raise UnverifiedBasis(f"La fuente advierte un cambio de perímetro{subject} sin base común verificada.",
+                              note_citation)
     additive = any(normalize(label) == normalize(metric) for label in ADDITIVE.findall(context))
     return Operand(citation=citation, metric=metric, entity=next(iter(entities.values())), period=period,
                    unit=unit_from_context(context, original, scope), basis=next(iter(bases.values())),
                    original=original, value=decimal_from_source(original, comma_grouping=comma_grouping),
                    comparable_basis=normalize(basis[1]) if basis else None, note=note, additive=additive,
-                   note_citation=note_citation)
+                   note_citation=note_citation, definition=definition)
 
 
 def exact_header(value, period):
     match = PERIOD.fullmatch(value.strip())
     return bool(match and local_period(match) == period)
+
+
+def metric_label(cell):
+    return normalize(ROW_NOTE.sub("", cell))
+
+
+def defined_metric(page, label, metric):
+    marker = ROW_NOTE.search(label)
+    if marker is None:
+        return None
+    pattern = rf"^\s*{marker[1]}\.\s*{re.escape(metric)}\s*=\s*(.+)"
+    lines = re.findall(pattern, page.get_text(sort=True), flags=re.I | re.M)
+    if len(lines) != 1:
+        raise Abstain("La nota numerada no acredita inequívocamente la definición del indicador.")
+    return TABULAR_LINES.sub(" ", lines[0].strip().rstrip(".").casefold())
 
 
 def table_operands(page, period, metric, citation, notes, note_citation):
@@ -99,11 +147,15 @@ def table_operands(page, period, metric, citation, notes, note_citation):
     for table_no, table in enumerate(page.find_tables().tables):
         rows = [[cell or "" for cell in row] for row in table.extract()]
         scope = f"{citation.doc_id}:{citation.pdf_page}:{table_no}"
-        first_metric = next((i for i, row in enumerate(rows) if row and normalize(row[0]) == normalize(metric)), None)
+        first_metric = next((i for i, row in enumerate(rows) if row and metric_label(row[0]) == normalize(metric)), None)
         if first_metric is None:
             continue
         matched_rows = True
         header_rows = rows[:first_metric]
+        section = next(((i, match[1]) for i, row in reversed(list(enumerate(header_rows)))
+                        if row and (match := INDICATORS.fullmatch(row[0].strip()))), None)
+        if section:
+            header_rows = header_rows[section[0]:]
         header_context = "\n".join(row[0] for row in header_rows[:4] if row)
         context = header_context if ENTITY.search(header_context) and CURRENCY.search(header_context) else header_context + "\n" + page_context
         columns = {col for row in header_rows[:4] for col, value in enumerate(row)
@@ -118,11 +170,12 @@ def table_operands(page, period, metric, citation, notes, note_citation):
                           for match in PERIOD.finditer(row[col])}
         if column_periods != {period}:
             raise Abstain("La columna mezcla periodos y no acredita un valor comparable.")
-        cells = [row[col].strip() for row in rows[first_metric:]
-                 if len(row) > col and normalize(row[0]) == normalize(metric)]
+        cells = [(i, row[0], row[col].strip()) for i, row in enumerate(rows[first_metric:], start=first_metric)
+                 if len(row) > col and metric_label(row[0]) == normalize(metric)]
         if len(cells) != 1:
             continue
-        original = cells[0]
+        row_number, label, original = cells[0]
+        definition = defined_metric(page, label, metric)
         grouping = any(re.fullmatch(r"[+-]?\d{1,3}(?:,\d{3}){2,}(?:\.\d+)?", cell.strip())
                        for row in rows for cell in row)
         if not grouping:
@@ -130,11 +183,12 @@ def table_operands(page, period, metric, citation, notes, note_citation):
             grouping = bool(re.search(r"\d\.\d{1,2}\s*%", page_text)
                             and not re.search(r"\d,\d{1,2}\s*%", page_text))
         evidence = citation.model_copy(update={
-            "evidence_id": f"{scope}:{first_metric}:{col}",
-            "snippet": f"{metric} | {period.label} | {original}",
+            "evidence_id": f"{scope}:{row_number}:{col}",
+            "snippet": f"{label} | {period.label} | {original}",
         })
         candidates.append(make_operand(evidence, metric, period, original, context, notes, scope,
-                                       grouping, note_citation))
+                                       grouping, note_citation, indicators=section[1] if section else None,
+                                       definition=definition))
     if len(candidates) > 1:
         raise Abstain("Varias celdas de la página pueden corresponder al indicador.")
     if matched_rows and not candidates:
