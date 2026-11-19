@@ -421,3 +421,46 @@ def test_stock_sum_is_rejected_without_reading_sources(corpus, monkeypatch):
     assert result["status"] == "abstained"
     assert "saldo a una fecha de corte" in result["answer"] and "no es aditiva" in result["answer"]
     assert result["tools_used"] == [] and result["citations"] == []
+
+
+
+def test_financial_prose_normalizes_periods_order_operations_and_units():
+    from apps.api.financial_agent import parse_intent
+
+    relative = parse_intent("Con base en el segundo trimestre de 2024, determina cuánto creció porcentualmente "
+                            "la utilidad neta trimestral de Grupo Faro al tercer trimestre de ese año.")
+    assert (relative.base.label, relative.current.label, relative.operation, relative.additional_difference) == (
+        "2T24", "3T24", "percent_change", True,
+    )
+    share = parse_intent("¿Qué proporción representa la utilidad neta de 2T24 frente a la de los primeros seis meses de 2024?")
+    assert (share.base.label, share.current.label, share.operation) == ("6M24", "2T24", "participation")
+    market = parse_intent("En la tabla bursátil del cuarto trimestre de 2024, ¿cuánto cayó la capitalización de "
+                          "mercado de Grupo Faro respecto al tercer trimestre, tanto en pesos como en dólares?")
+    assert (market.base.label, market.current.label, market.currencies) == ("3T24", "4T24", ("pesos", "dólares"))
+    with pytest.raises(Abstain, match="misma escala"):
+        parse_intent("Compara capitalización de mercado de Grupo Faro entre 1T24 y 2T24 "
+                     "tanto en miles de pesos como en millones de dólares")
+
+
+def test_participation_needs_containment_same_table_and_same_basis():
+    from dataclasses import replace
+    from apps.api.finance import PERIOD, local_period
+
+    def operand(period, number, column):
+        return Operand(
+            metric="utilidad neta", entity="Grupo Faro", period=local_period(PERIOD.fullmatch(period)),
+            value=Decimal(number), original=number, unit=Unit("moneda", "MXN", Decimal(1), "MXN"),
+            basis="consolidada", citation=Citation(doc_id="f" * 64, filename="tabla.pdf", pdf_page=1,
+                                                   evidence_id=f"f:1:0:4:{column}", snippet=number),
+        )
+
+    whole, part = operand("9M24", "600", 2), operand("2T24", "150", 1)
+    assert calculate("participation", whole, part)[:2] == (Decimal(25), "% de participación")
+    with pytest.raises(Abstain, match="distinto tipo"):
+        calculate("percent_change", whole, part)
+    with pytest.raises(Abstain, match="no está incluido"):
+        calculate("participation", whole, operand("4T24", "150", 1))
+    with pytest.raises(Abstain, match="misma tabla"):
+        calculate("participation", whole, replace(part, citation=part.citation.model_copy(update={"pdf_page": 2})))
+    with pytest.raises(Abstain, match="bases contables"):
+        calculate("participation", whole, replace(part, basis="individual"))

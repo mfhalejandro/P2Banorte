@@ -110,3 +110,84 @@ PYTHONPATH=. .venv/bin/python -B tests/financial/evaluate_acceptance.py --operat
 ~~~
 
 La ejecución final pasó 28/28 consultas, con dos paráfrasis por categoría y negativos adicionales. Las 34 referencias pasaron acceso, texto y respaldo semántico. El máximo de la batería completa fue 9.230 s (P05). Pasaron 54 pruebas Python, 5 subcasos y 6 pruebas smoke Chromium. La aceptación anterior pasó 11/11 y el control histórico 14/14 con 25/25 PNG.
+
+
+## B01–B10 y generalización independiente sobre a156744
+
+Trabajo posterior al simulacro. HEAD y origin/main coincidían en a156744, con el árbol y el índice Git limpios. Se cotejaron las huellas de los RCTF y 24 PDF con el manifiesto y el SQLite existente de 34.662 fragmentos. Se mantuvieron la configuración de la API, el frontend y la huella del índice.
+
+La reproducción por la API original devolvió 1 PASS y 9 FAIL según el oráculo estricto. B03 y B09 habían sido PARTIAL en la sesión manual reportada. En la reproducción B03 no explicó el alcance y B09 no diagnosticó la invalidez conceptual. Los datos previos se mantienen separados de los veredictos manuales y del cierre histórico.
+
+| Caso | Antes → después | Causa de la línea base | Resultado tras la corrección | POST origen / corregido (s) | Herramientas / lecturas final |
+|---|---|---|---|---:|---:|
+| B01 | FAIL → PASS | La petición de página se convertía en el supuesto tema de la definición. | Definición de pérdida potencial por impago en IA Banorte ESP_16.pdf, p. 29. | 0.178 / 0.718 | 5 / 4 |
+| B02 | FAIL → PASS | La búsqueda exigía una sola coincidencia para el año, las políticas, las medidas y el formato. | Tres políticas y medidas de gestión por separado. EEFF 2025 Grupo_.pdf, pp. 152 y 153. Selección parcial. | 0.122 / 0.209 | 4 / 2 |
+| B03 | FAIL → PASS | Faltaba distinguir la lista observada del alcance probatorio de un informe. | El apartado de la Tenedora enumera tres políticas. La fuente no demuestra exhaustividad para Banorte. Cita a p. 152. | 0.139 / 0.399 | 5 / 3 |
+| B04 | FAIL → PASS | La gramática omitía la variación indirecta y los periodos en palabras. | 14,018 a 14,238 millones de pesos, +220 y +1,57 %. 3T24.pdf, p. 5. | 0.113 / 3.978 | 10 / 6 |
+| B05 | FAIL → PASS | El indicador y los periodos precedían a la operación en puntos porcentuales. | 22,9 % a 23,6 %, +0,7 pp. Notas equivalentes en 4T24_1.pdf y 2T25_vc_.pdf, p. 6 de cada PDF. | 0.063 / 6.172 | 11 / 7 |
+| B06 | FAIL → PASS | El planificador perdía los periodos escritos y solo podía ejecutar una moneda. | 508,555 a 406,931 millones de pesos, −101,624. 30,761 a 22,300 millones de dólares, −8,461. Cuatro celdas en 2T24.pdf, p. 7. | 0.008 / 3.017 | 20 / 12 |
+| B07 | FAIL → PASS | La pregunta modal sobre comparabilidad quedaba en el flujo documental. | Se abstiene por desconsolidación de Bineo y falta de base común. 3T25_vc.pdf, p. 5, con 3T24 como cifra aislada. | 0.085 / 4.328 | 10 / 7 |
+| B08 | FAIL → PASS | El selector y la calculadora carecían de una operación de participación. | 14,238 ÷ 42,464 = 33,53 % de participación, 3T24.pdf, p. 5. Los dos periodos no sirven para medir crecimiento. | 0.087 / 3.896 | 10 / 6 |
+| B09 | FAIL → PASS | La cláusula de propósito desplazaba al indicador y evitaba validar la no aditividad. | Abstención conceptual antes de consultar el corpus. | 0.168 / 0.008 | 0 / 0 |
+| B10 | PASS → PASS | El año futuro carecía de respaldo. El rechazo de la línea base era correcto. | Abstención por falta de evidencia, sin citas. | 0.095 / 0.057 | 1 / 0 |
+
+Se distinguen el coste de búsqueda, la lectura del original y el cálculo. Las suboperaciones por moneda comparten un plazo y un límite máximo de llamadas. Los resultados parciales conservan la causa y las evidencias verificadas de cada moneda. Para los rótulos de la tabla bursátil «pesos» y «dólares», el código ISO requiere indicación cambiaria dentro del mismo informe. En B06 se comprobó USD/MXN en la página física 71 y las filas de los importes en la página física 7. La operación usa las cifras publicadas de cada fila.
+
+La participación solo admite un flujo aditivo de un trimestre incluido en el acumulado del mismo año, con la misma tabla, métrica, entidad, unidad y base. La comparabilidad original sigue siendo obligatoria para el crecimiento. El detalle de la tabla y las notas se cotejaron en el PDF físico. La búsqueda documental de medidas sigue una subsección numerada de la página siguiente del mismo documento, dentro del presupuesto de lecturas.
+
+El verificador local conserva pregunta, respuesta, ruta efectiva, lista de herramientas, referencias, datos de la intención y latencia POST en JSONL. Los archivos JSONL son derivados locales y quedan fuera del repositorio. [Ejecutor y oráculos](../../tests/financial/evaluate_adversarial.py)
+
+~~~bash
+export RAG_DATA_DIR="$PWD/docs/requirements/data"
+export RAG_STATE_DIR=/ruta/al/indice-existente
+PYTHONPATH=. .venv/bin/python -B tests/financial/evaluate_adversarial.py exact --data "$RAG_DATA_DIR" > /tmp/p2-b-exact.jsonl
+PYTHONPATH=. .venv/bin/python -B tests/financial/evaluate_adversarial.py new --data "$RAG_DATA_DIR" --check-oracles
+PYTHONPATH=. .venv/bin/python -B tests/financial/evaluate_adversarial.py new --data "$RAG_DATA_DIR" > /tmp/p2-b-new.jsonl
+~~~
+
+
+### Regresiones y coste
+
+- B01–B10: 10/10 en API y Chromium, con 16/16 aperturas PNG, 16/16 referencias textuales y 16/16 respaldos semánticos.
+- Regresión financiera: 14/14 con 8 cálculos, 6 abstenciones, 25/25 PNG y coincidencia exacta de pasos, respuestas y citas con la auditoría anterior a esta tarea.
+- Aceptación anterior: 11/11 y batería ampliada: 28/28. Suite Python: 56 pruebas y 5 subcasos. Smoke Chromium: 6 pruebas. Selección dirigida negativa: 12 pruebas. Starlette emitió un aviso de deprecación conocido.
+- La lectura de moneda inicialmente recorrió texto del informe entero y, bajo concurrencia, B06 llegó al plazo compartido después de verificar MXN. El acceso final localiza por FTS la indicación cambiaria y la comprueba en el mismo original. B06 pasó de 8,179 s en la primera medición aislada a 3,017 s con la lectura acotada. El cliente recibió el diagnóstico parcial correcto durante el ensayo bajo concurrencia.
+
+| Muestra | Mediana POST (s) | P95 POST (s) | Máximo POST (s) |
+|---|---:|---:|---:|
+| B01–B10 | 1.867 | 6.172 | 6.172 |
+| G01–G22 | 1.344 | 6.041 | 8.848 |
+
+P95 por rango más próximo. Muestras secuenciales, pequeñas, sin carga controlada. POST termina antes del render PNG. La instrumentación separada mide tiempo de pared dentro de cada herramienta en FastAPI mediante TestClient. Las lecturas son llamadas a read_source, incluidas las que descartan candidatos. Una llamada puede consultar notas, encabezados cercanos o la referencia cambiaria.
+
+| Caso | Búsqueda (s) | Lectura y extracción (s) | Calculadora financiera (s) | CPU de proceso (s) |
+|---|---:|---:|---:|---:|
+| B01 | 0.1023 | 0.5389 | 0.0000 | 0.6703 |
+| B02 | 0.0332 | 0.1593 | 0.0000 | 0.2112 |
+| B03 | 0.0241 | 0.2827 | 0.0000 | 0.3231 |
+| B04 | 0.1348 | 3.9150 | 0.0003 | 4.1139 |
+| B05 | 0.1133 | 5.5588 | 0.0002 | 5.7260 |
+| B06 | 0.2877 | 2.7457 | 0.0007 | 3.0730 |
+| B07 | 0.1500 | 4.0500 | 0.0000 | 4.2649 |
+| B08 | 0.1415 | 3.8713 | 0.0007 | 4.0672 |
+| B09 | 0.0000 | 0.0000 | 0.0000 | 0.0103 |
+| B10 | 0.0504 | 0.0000 | 0.0000 | 0.0635 |
+
+El entorno mostró 8 CPU en afinidad y 24.031 MiB de RAM, con 19.877 MiB disponibles en el muestreo. El proceso instrumentado registró un pico de RSS de 124.8 MiB y 22.52 s de CPU en las diez consultas. La unidad de API registró 201,7 MiB de memoria pico en su grupo de procesos durante la ejecución final. Estas medidas no acreditan rendimiento bajo el presupuesto objetivo de Coder de 2 CPU y 4 GB.
+
+### Muestra independiente G01–G22
+
+Se cotejaron el texto visible, pasajes, notas y celdas contra los originales antes de ejecutar las preguntas. Se verificaron los valores calculados con Decimal y los negativos sin respaldo por separado. El ejecutor y los oráculos se congelaron con SHA-256 e5b4a27d9ad3551590f1905ed36f6da80d92d7c524b7879f98f0fa7b5878f8c2. Se comprobó la huella del diff de aplicación antes y después de medir.
+
+La batería independiente obtuvo **16 PASS, 1 PARTIAL y 5 FAIL**. Los PASS fueron G02, G04, G06–G11, G13–G14, G16–G18 y G20–G22. Las referencias emitidas pasaron 25/25 en acceso PNG, 25/25 en presencia textual y 25/25 en respaldo semántico. Son métricas de las citas emitidas y no incluyen afirmaciones que faltaron en la respuesta.
+
+| Caso pendiente | Veredicto | Capa y observación |
+|---|---|---|
+| G01 | FAIL | Interpretación documental. Una pregunta indirecta sobre impago no activa la ruta específica de definición. |
+| G03 | FAIL | Recuperación. Con el tema CCL y «informes de la Tenedora» se leyeron cuatro candidatos sin resolver el emisor ni llegar al pasaje de p. 153. |
+| G05 | FAIL | Interpretación y recuperación. La petición conjunta de objetivos y explicación del CCL no genera búsquedas separadas. |
+| G12 | PARTIAL | Orquestación. Calculó y citó +220 millones, pero omitió la diferencia de ROE y no explicó esa omisión. |
+| G15 | FAIL | Interpretación. «Del grupo GFNorte» quedó incorporado en el indicador y desvió la recuperación. Debía explicar periodos de distinta duración. |
+| G19 | FAIL | Diagnóstico. Se abstuvo con seguridad, pero devolvió ambigüedad de columna en vez de la ausencia de la entidad. |
+
+**VERIFIED** en las baterías de desarrollo y regresiones indicadas. **PARTIAL** en generalización, principalmente definiciones indirectas y composición libre de preguntas. La síntesis multiapartado no acotada, la resolución amplia de referencias a entidades y la planificación de varias métricas requerirían ampliar el flujo local o evaluar inferencia autorizada. **NOT RUN** en SPEC-002-AC-06, Coder y CI para estos cambios. La arquitectura V3 y los resultados históricos se conservaron.

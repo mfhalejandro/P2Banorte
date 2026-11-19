@@ -62,3 +62,14 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | Generalización | Evidencia | Resultado |
 |---|---|---|
 | PRD RF-03, RF-07 a RF-10 y T-05/T-07/T-13 | P01–P08, paráfrasis, restricciones negativas y validación semántica del original. | VERIFIED en la muestra local. [Auditoría](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md) |
+
+### Auditoría B01–B10 posterior al simulacro
+
+| Criterio | Verificación | Estado |
+|---|---|---|
+| SPEC-001-AC-01/03/05, RF-03 y RF-10 | B01–B03 y B10. Definición, continuación de sección, alcance y abstención futura, con contraste sobre la página original. | VERIFIED en la muestra de desarrollo. |
+| SPEC-002-AC-01 a AC-05 y T-05/T-07/T-08/T-09 | B04–B09. Dos monedas con operando individual, comparación entre tasas, participación, restricción de periodos, cambio de perímetro y stock. Regresiones 14/14, 11/11 y 28/28. | VERIFIED en la muestra local. |
+| T-13 · Generalización | G01–G22 con oráculos y código congelados. 16 PASS, 1 PARTIAL y 5 FAIL. | PARTIAL. |
+| SPEC-002-AC-06 | Proveedor real y entorno de evaluación. | NOT RUN. |
+
+[Resultados, causas, métricas y comandos](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#b01b10-y-generalización-independiente-sobre-a156744)

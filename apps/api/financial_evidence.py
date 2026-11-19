@@ -210,7 +210,7 @@ def table_operands(page, period, metric, citation, notes, note_citation):
     return candidates[0] if candidates else None
 
 
-def market_operand(document, page, citation, metric, period, other, requested_currency, requested_scale,
+def market_operand(corpus, document, page, citation, metric, period, other, requested_currency, requested_scale,
                    notes, note_citation):
     inline = MARKET_ROW.fullmatch(metric)
     if inline:
@@ -225,13 +225,32 @@ def market_operand(document, page, citation, metric, period, other, requested_cu
             raise Abstain("La consulta especifica unidades de capitalización incompatibles.")
         requested_currency, requested_scale = inline_currency, inline_scale
 
+    iso_reference = None
+
     def matches_unit(label):
+        nonlocal iso_reference
         unit = CURRENCY.fullmatch(label.strip())
         if unit is None:
             return False
         scale, currency = unit.groups()
-        return ((not requested_currency or currency_key(currency) == requested_currency)
-                and (not requested_scale or requested_scale == (scale or "").lower()))
+        if requested_scale and requested_scale != (scale or "").lower():
+            return False
+        code = currency_key(currency)
+        if not requested_currency or code == requested_currency:
+            return True
+        # El par cambiario del mismo informe identifica las etiquetas de moneda.
+        if requested_currency != {"pesos": "MXN", "dólares": "USD"}.get(code):
+            return False
+        if iso_reference is None:
+            with closing(corpus.connect()) as db:
+                pages = db.execute("""
+                    SELECT DISTINCT page FROM chunks WHERE chunks MATCH ? AND doc=? LIMIT 8
+                """, ('"tipo de cambio" AND "USD/MXN"', citation.doc_id)).fetchall()
+            iso_reference = any(
+                re.search(r"tipo de cambio\s*\(\s*USD\s*/\s*MXN\s*\)", document[row[0] - 1].get_text(), re.I)
+                for row in pages
+            )
+        return iso_reference
 
     cell = market_cells(page, period, other, matches_unit)
     indices = [page.number] + ([page.number - 1] if page.number else [])
@@ -286,7 +305,7 @@ def read_operand(corpus, ref, metric, period, *, other=None, requested_currency=
         elif suspected_pages:
             notes += "\n" + document[suspected_pages[0]].get_text()
         if is_market_metric(metric):
-            return market_operand(document, page, citation, metric, period, other,
+            return market_operand(corpus, document, page, citation, metric, period, other,
                                   requested_currency, requested_scale, notes, note_citation)
         selected = table_operands(page, period, metric, citation, notes, note_citation)
         if selected:

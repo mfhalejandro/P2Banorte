@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from .corpus import Citation, Corpus, SearchRequest, DEFINITION_LEAD, definition_source, definition_topic, documentary_query, explanation_terms, terms
+from .corpus import Citation, Corpus, SearchRequest, DEFINITION_LEAD, definition_source, definition_topic, documentary_query, explanation_terms, indirect_definition, policy_scope, terms
 
 
 class ChatRequest(BaseModel):
@@ -91,11 +91,25 @@ class Agent:
                                 tools_used=used, request_id=uuid4().hex, provider_mode=self.provider.mode)
 
         no_evidence = "No encontré evidencia suficiente en los documentos indexados para responder a esta pregunta."
+        definition = indirect_definition(question)
+        scoped = policy_scope(question)
         query = documentary_query(question)
+        if definition:
+            query = f"¿Cómo se define el {definition[0]}?"
         if not query:
             return result("abstained", no_evidence, [])
         async with asyncio.timeout(self.timeout):
-            found = await call("search_corpus", self.corpus.search_corpus, SearchRequest(query=query))
+            documents = None
+            if scoped:
+                year, subject, coverage, measures = scoped
+                catalog = await call("list_documents", lambda _: self.corpus.catalog(), None)
+                documents = {
+                    row["doc_id"] for row in catalog
+                    if any(required <= set(terms(row["filename"]))
+                           for required in ({"eeff", year}, {"estados", "financieros", year}))
+                }
+                query = "Enumera " + " ".join(sorted(subject))
+            found = await call("search_corpus", self.corpus.search_corpus, SearchRequest(query=query, documents=documents))
             observed = {}
             topic = definition_topic(query)
             explain = explanation_terms(query) if not topic else set()
@@ -103,14 +117,28 @@ class Agent:
                 partial(self.corpus.read_source, topic=topic, explain=explain, source=definition_source(query) if topic else None)
                 if topic or explain else self.corpus.read_source
             )
-            for ref in found[:4]:
+            for ref in found[:3 if scoped else 4]:
                 citation = await call("read_source", read_source, ref)
-                if citation.snippet:
+                if citation.snippet and (not definition or definition[1] <= set(terms(citation.snippet))):
                     observed[citation.evidence_id] = citation
             if observed:
                 selected = await self.provider.select(query, list(observed.values()))
                 if selected in observed:
                     citation = observed[selected]
+                    if scoped:
+                        answer = ("El documento acredita las políticas enumeradas en esta sección. "
+                                  "La evidencia recuperada no acredita que sean todas las políticas de Banorte. "
+                                  if coverage else "La selección es parcial. Políticas: ")
+                        answer += citation.snippet
+                        citations = [citation]
+                        if measures:
+                            continuation = await call("read_source", self.corpus.read_section_continuation, citation)
+                            if continuation:
+                                citations.append(continuation)
+                                answer += " Medidas de gestión: " + continuation.snippet
+                            else:
+                                answer += " Las medidas adicionales no pudieron acreditarse en una sección vinculada."
+                        return result("answered", answer, citations)
                     if explain:
                         primary = citation.snippet.partition(":")[0]
                         items = list_items(citation.snippet)

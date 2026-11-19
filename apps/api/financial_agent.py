@@ -1,7 +1,7 @@
 """Orquestación local de herramientas V3 y construcción de la respuesta auditada."""
 import asyncio
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, localcontext
 from typing import Literal
 from uuid import uuid4
@@ -61,6 +61,9 @@ class Intent:
     output_currency: str | None = None
     output_scale: str | None = None
     percentage_points: bool = False
+    additional_difference: bool = False
+    currencies: tuple[str, ...] = ()
+    definition_check: bool = False
 
 
 FINANCIAL_VERB = r"(?:compara(?:r)?|calcula(?:r)?|suma(?:r)?(?!\s+(?:de|en|entre)\b))"
@@ -90,14 +93,68 @@ class FinancialRequest:
     indicator: str
     operation: Operation
     percentage_points: bool
+    additional_difference: bool = False
+    definition_check: bool = False
+
+
+ORDINAL = {"primer": 1, "segundo": 2, "tercer": 3, "cuarto": 4}
+WRITTEN_PERIOD = re.compile(
+    r"\b(?:(primer|segundo|tercer|cuarto)\s+trimestre|(primeros\s+(?:seis|nueve)\s+meses))"
+    r"(?:\s+de(?:l\s+año)?\s+(20\d{2})|\s+de\s+(?:ese|dicho)\s+año)?", re.I,
+)
+COMPARABILITY_QUERY = re.compile(
+    r"^(?:se puede afirmar que\s+)?(.+?)\s+(?:tuvo|experiment[oó]|registr[oó])"
+    r"\s+una\s+variaci[oó]n\s+(?:directamente\s+)?comparable\s+entre\b", re.I,
+)
+SHARE_QUERY = re.compile(r"\bqu[eé]\s+(?:porcentaje|proporci[oó]n)\s+representa\s+([^?]+)", re.I)
+DUAL_CHANGE = re.compile(
+    r"\b(?:calcula|determina|indica)\s+(?:la\s+)?diferencia\s+(?:absoluta\s+)?y\s+(?:la\s+)?"
+    r"variaci[oó]n\s+(?:relativa|porcentual)\s+(?:del?|en)\b", re.I,
+)
+RELATIVE_QUERY = re.compile(rf"\b(?:determina\s+)?cu[aá]nto\s+{CHANGE_VERB}\s+porcentualmente\b", re.I)
+TWO_CURRENCIES = re.compile(
+    rf"\b(?:tanto\s+)?en\s+({CURRENCY.pattern})\s+(?:como|y)\s+(?:en\s+)?({CURRENCY.pattern})", re.I,
+)
+
+
+def normalize_periods(text: str) -> str:
+    year = None
+
+    def replace_period(match):
+        nonlocal year
+        ordinal, months, explicit = match.groups()
+        year = explicit or year
+        if not year:
+            return match[0]
+        label = f"{ORDINAL[ordinal.lower()]}T" if ordinal else ("9M" if "nueve" in months.lower() else "6M")
+        return label + year[-2:]
+
+    return WRITTEN_PERIOD.sub(replace_period, text)
 
 
 def recognize_financial_request(question: str) -> FinancialRequest | None:
-    content = documentary_query(question)
+    content = normalize_periods(documentary_query(question))
     content = " ".join(
         part for part in re.split(r"(?<=[.?!])\s+", content)
-        if not VALUE_FORMAT.fullmatch(part.strip(" ¿¡?!."))
+        if not VALUE_FORMAT.fullmatch(part.strip(" ¿?!."))
     )
+    if share := SHARE_QUERY.search(content):
+        return FinancialRequest(content, PERIOD.split(share[1], maxsplit=1)[0], "participation", False)
+    if comparable := COMPARABILITY_QUERY.match(content.strip(" ¿")):
+        return FinancialRequest(content, comparable[1], "difference", False)
+    relative = RELATIVE_QUERY.search(content) or DUAL_CHANGE.search(content)
+    if relative:
+        rest = content[relative.end():]
+        return FinancialRequest(content, PERIOD.split(rest, maxsplit=1)[0], "percent_change", False, True)
+
+    first_clause, separator, continuation = content.partition(",")
+    if separator and re.match(r"^para\s+(?:obtener|estimar|conseguir)\b", first_clause, re.I):
+        content = continuation.strip()
+    if re.match(r"^al\s+(?:contrastar|comparar)\b", content, re.I) and re.search(r"\bpuntos porcentuales\b", content, re.I):
+        subject = re.sub(r"^al\s+(?:contrastar|comparar)\s+", "", content, flags=re.I)
+        return FinancialRequest(content, PERIOD.split(subject, maxsplit=1)[0], "difference", True,
+                                definition_check=bool(re.search(r"\bdefinici[oó]n\b", content, re.I)))
+
     cue = FINANCIAL_REQUEST.search(content)
     if not cue:
         return None
@@ -139,7 +196,8 @@ def parse_intent(question: str) -> Intent:
     periods = list(dict.fromkeys(local_period(match) for match in matches))
     prefix = request.indicator.strip(" ¿?!:,")
     prefix = re.sub(r"^(?:la|el|los|las)\s+", "", prefix, flags=re.I)
-    metric_entity = re.sub(r"\s+(?:entre|del|de|en|para)\s*$", "", prefix, flags=re.I).strip()
+    metric_entity = re.sub(r"\s+(?:respecto\s+al?|al\s+cierre\s+de|entre|del|de|en|para|al)\s*$", "", prefix, flags=re.I).strip()
+    metric_entity = re.sub(r"\s+trimestral(?=\s+de\s|$)", "", metric_entity, flags=re.I)
     unit_pattern = re.compile(
         rf"\s+(?:expresad[oa]s?\s+)?en\s+{CURRENCY.pattern}(?=$|\s+de\s+(?:grupo|banco|gfnorte)\b)", re.I,
     )
@@ -149,6 +207,8 @@ def parse_intent(question: str) -> Intent:
     metric, entity = (metric_entity[:subject.start()], subject[1]) if subject else (metric_entity, "")
     if len(periods) != 2 or not normalize(metric):
         raise Abstain(missing)
+    if request.operation == "participation" or re.search(r"\brespecto\s+al?\s+$", request.content[:matches[-1].start()], re.I):
+        periods.reverse()
     key = request.content.casefold()
     if "acumulad" in key and all(p.kind == "quarter" for p in periods):
         raise Abstain("Indica el periodo acumulado explícitamente, por ejemplo 9M25.")
@@ -156,13 +216,26 @@ def parse_intent(question: str) -> Intent:
         raise Abstain("La unidad solicitada exige una diferencia entre tasas, con dos tasas comparables.")
     ending = request.content[matches[-1].end():]
     units = [match.groups() for match in re.finditer(rf"\ben\s+{CURRENCY.pattern}", ending, re.I)]
+    dual = TWO_CURRENCIES.search(ending)
+    currencies_requested = ()
+    if dual:
+        first_scale, first_name, second_scale, second_name = dual[2], dual[3], dual[5], dual[6]
+        currencies_requested = tuple(dict.fromkeys(currency_key(name) for name in (first_name, second_name)))
+        if len(currencies_requested) == 2 and not inline_units:
+            units = [(scale, name) for scale, name in units if currency_key(name) not in currencies_requested]
+            if first_scale or second_scale:
+                if normalize(first_scale or "") != normalize(second_scale or ""):
+                    raise Abstain("Las suboperaciones deben declarar la misma escala o ambas dejarla a la fuente.")
+                units.append((first_scale, first_name))
     units.extend(inline_units)
     currencies = {currency_key(name) for _, name in units}
     scales = {scale.lower() for scale, _ in units if scale}
-    if len(currencies) > 1 or len(scales) > 1 or (request.percentage_points and units):
+    if (len(currencies) > 1 or len(scales) > 1 or (request.percentage_points and units)
+            or (currencies_requested and (inline_units or any(code not in currencies_requested for code in currencies)))):
         raise Abstain("La consulta especifica unidades o monedas incompatibles.")
     return Intent(metric, entity or None, *periods, request.operation, "inspecciona" in key,
-                  next(iter(currencies), None), next(iter(scales), None), request.percentage_points)
+                  next(iter(currencies), None), next(iter(scales), None), request.percentage_points,
+                  request.additional_difference, currencies_requested, request.definition_check)
 
 
 @dataclass
@@ -240,6 +313,10 @@ class LocalToolDouble:
         return candidates[0][0]
 
 
+class BudgetExhausted(ProviderUnavailable):
+    pass
+
+
 class FinancialAgent:
     def __init__(self, corpus: Corpus, provider=None, max_calls=12, timeout=15):
         self.corpus = corpus
@@ -248,10 +325,43 @@ class FinancialAgent:
         self.timeout = timeout
 
     async def answer(self, question):
-        trace = Trace()
         try:
             intent = parse_intent(question)
             check_stock_sum(intent.operation, intent.metric)
+        except Abstain as exc:
+            return self.response(Trace(), str(exc))
+        if not intent.currencies:
+            return await self.run_intent(intent)
+        if intent.operation == "participation" or intent.percentage_points:
+            return self.response(Trace(), "La operación solicitada no admite una salida en monedas.")
+
+        results = []
+        remaining = self.max_calls * 2
+        deadline = asyncio.get_running_loop().time() + self.timeout
+        for currency in intent.currencies:
+            trace = Trace()
+            try:
+                async with asyncio.timeout_at(deadline):
+                    reply = await self.run_intent(replace(intent, output_currency=currency), trace, remaining)
+            except TimeoutError:
+                reply = self.response(trace, "El plazo compartido no permitió verificar esta moneda.")
+            except BudgetExhausted:
+                reply = self.response(trace, "Se agotaron las llamadas compartidas antes de verificar esta moneda.")
+            results.append((currency, reply))
+            remaining -= len(trace.tools)
+        first = results[0][1]
+        return first.model_copy(update={
+            "answer": " ".join(f"{code} — {reply.answer}" for code, reply in results),
+            "tools_used": [tool for _, reply in results for tool in reply.tools_used],
+            "citations": list({cite.evidence_id: cite for _, reply in results for cite in reply.citations}.values()),
+            "warnings": list(dict.fromkeys(warning for _, reply in results for warning in reply.warnings)),
+            "status": "answered" if any(reply.status == "answered" for _, reply in results) else "abstained",
+        })
+
+    async def run_intent(self, intent, trace=None, limit=None):
+        trace = trace or Trace()
+        limit = self.max_calls if limit is None else limit
+        try:
             async with asyncio.timeout(self.timeout):
                 while True:
                     proposal = await self.provider.propose(intent, trace)
@@ -259,8 +369,8 @@ class FinancialAgent:
                         if trace.result is None:
                             raise Abstain("La comparación no tiene un resultado respaldado por la calculadora.")
                         break
-                    if len(trace.tools) >= self.max_calls:
-                        raise ProviderUnavailable("Se alcanzó el límite de herramientas.")
+                    if len(trace.tools) >= limit:
+                        raise BudgetExhausted("Se alcanzó el límite de herramientas.")
                     call = ToolCall.model_validate(proposal)
                     trace.tools.append(call.name)
                     await asyncio.to_thread(self.execute, intent, trace, call)
@@ -268,7 +378,7 @@ class FinancialAgent:
             raise ProviderUnavailable("La llamada de herramienta es inválida.") from exc
         except Abstain as exc:
             return self.response(trace, str(exc))
-        return self.response(trace)
+        return self.response(trace, intent=intent)
 
     def execute(self, intent, trace, call):
         name, args = call.name, call.arguments
@@ -323,12 +433,16 @@ class FinancialAgent:
                 raise Abstain("La calculadora requiere ambos operandos verificados para la operación solicitada.")
             if intent.output_currency:
                 actual = (current.unit.currency or "").split(":", 1)[0]
-                if actual != intent.output_currency:
+                market_currency = actual in {"pesos", "dólares"} and base.basis == current.basis == "capitalización de la acción del grupo"
+                alias = {"pesos": "MXN", "dólares": "USD"}.get(actual) if market_currency else None
+                if actual != intent.output_currency and alias != intent.output_currency:
                     raise Abstain("La evidencia no acredita la moneda solicitada. Indica una moneda respaldada por los originales.")
                 if intent.output_scale and not current.unit.label.lower().startswith(intent.output_scale):
                     raise Abstain("El cálculo está respaldado en otra escala. Consulta en la escala indicada en las fuentes.")
             if intent.percentage_points and any(item.unit.label != "%" for item in (base, current)):
                 raise Abstain("La unidad solicitada exige una diferencia entre tasas, con dos tasas comparables.")
+            if intent.definition_check and (not base.definition or not current.definition):
+                raise Abstain("Las fuentes no acreditan las definiciones de ambos operandos.")
             trace.result = base, current, calculate(params.operation, base, current)
 
     @staticmethod
@@ -337,7 +451,7 @@ class FinancialAgent:
             return operand.original
         return f"{operand.original} {operand.unit.label}"
 
-    def response(self, trace, reason=None):
+    def response(self, trace, reason=None, *, intent=None):
         warnings = []
         citations = {}
         if reason:
@@ -375,6 +489,13 @@ class FinancialAgent:
                       f"Base B ({base.period.label}): {self.operand_text(base)}."
                       f"{conversion} Periodo A ({current.period.label}): {self.operand_text(current)}. "
                       f"{formula} = {display(value)} {unit}.")
+            if intent and intent.additional_difference:
+                delta, delta_unit, _ = calculate("difference", base, current)
+                answer += f" Diferencia con signo: {display(delta)} {delta_unit}."
+            if intent and intent.definition_check and base.definition and base.definition == current.definition:
+                answer += " Las notas de ambas fuentes respaldan la misma definición del indicador."
+            if intent and intent.operation == "participation":
+                answer += " Es una participación del trimestre dentro del acumulado; los periodos no son equivalentes para medir crecimiento temporal."
             for item in (base, current):
                 citations[item.citation.evidence_id] = item.citation
                 if item.note:

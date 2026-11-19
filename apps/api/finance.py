@@ -6,7 +6,7 @@ from typing import Literal
 
 from .corpus import Citation, terms
 
-Operation = Literal["difference", "percent_change", "ratio", "sum"]
+Operation = Literal["difference", "percent_change", "ratio", "participation", "sum"]
 PERIOD = re.compile(r"(?<!\w)(?:([1-4])\s*T|([369])\s*M|(12)\s*M)\s*[- ]?\s*(20\d{2}|\d{2})(?!\w)", re.I)
 
 
@@ -95,7 +95,20 @@ def calculate(operation: Operation, base: Operand, current: Operand) -> tuple[De
     check_stock_sum(operation, current.metric)
     if normalize(base.metric) != normalize(current.metric) or normalize(base.entity) != normalize(current.entity):
         raise Abstain("Las cifras corresponden a indicadores o entidades distintos.")
-    if (base.period.kind, base.period.months) != (current.period.kind, current.period.months):
+    if operation == "participation":
+        flows = {"utilidad neta", "ingresos intereses", "ingresos totales", "gastos operacion"}
+        if not (base.additive and current.additive) and normalize(current.metric) not in flows:
+            raise Abstain("La participación temporal exige una magnitud de flujo aditiva, como la utilidad neta.")
+        whole, part = base.period, current.period
+        if (whole.kind != "ytd" or part.kind != "quarter" or whole.year != part.year
+                or not whole.end - whole.months <= part.end - part.months < part.end <= whole.end):
+            raise Abstain("El trimestre no está incluido en el acumulado solicitado.")
+        scope = lambda item: (item.citation.doc_id, item.citation.pdf_page, item.citation.evidence_id.rsplit(":", 2)[0])
+        if (scope(base) != scope(current) or base.unit.name != "moneda"
+                or not all(re.search(r":\d+:\d+:\d+:\d+$", item.citation.evidence_id)
+                           for item in (base, current))):
+            raise Abstain("La participación exige cifras monetarias de la misma tabla y una base común.")
+    elif (base.period.kind, base.period.months) != (current.period.kind, current.period.months):
         raise Abstain("Los periodos tienen distinto tipo o duración, por ejemplo trimestre frente a acumulado.")
     if (base.unit.name, base.unit.currency) != (current.unit.name, current.unit.currency):
         currency_a, currency_b = base.unit.currency or "", current.unit.currency or ""
@@ -119,6 +132,10 @@ def calculate(operation: Operation, base: Operand, current: Operand) -> tuple[De
             if b <= 0:
                 raise Abstain("La variación porcentual requiere una base mayor que cero.")
             return (a - b) / b * 100, "%", "(A − B) ÷ B × 100"
+        if operation == "participation":
+            if b <= 0:
+                raise Abstain("La participación exige un acumulado mayor que cero.")
+            return a / b * 100, "% de participación", "A ÷ B × 100"
         if operation == "ratio":
             if b == 0:
                 raise Abstain("La razón requiere un denominador distinto de cero.")

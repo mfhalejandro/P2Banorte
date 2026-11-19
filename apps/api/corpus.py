@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=1200)
     top_k: int = Field(default=5, ge=1, le=10)
+    documents: set[str] | None = None
 
 
 class SourceRef(BaseModel):
@@ -91,6 +92,37 @@ EXPLANATION_PROMPT = re.compile(
     r"|(?:cu[aá]les\s+son|describe|enumera|explica)\s+(.+))$", re.I,
 )
 LIST_MARK = re.compile(r"^([•●▪–·])(?:\s+|$)")
+
+
+INDIRECT_DEFINITION = re.compile(
+    r"^(?:(?:seg[uú]n|de acuerdo con)\s+(?:los\s+)?(?:informes|reportes|documentos)\s+disponibles,\s*)?¿?qu[eé]\s+implica\s+para\s+(.+?)\s+el\s+(.+?)\s+y\s+c[oó]mo\s+se\s+define\?",
+    re.I,
+)
+REPORT_CONTEXT = re.compile(r"\bestados financieros de (20\d{2})\b", re.I)
+SECTION = re.compile(r"^(\d+(?:\.\d+)*)\.?\s+([^\W\d].+)$")
+
+
+def indirect_definition(question):
+    match = INDIRECT_DEFINITION.search(question)
+    return (match[2], set(terms(match[1]))) if match else None
+
+
+def policy_scope(question):
+    report = REPORT_CONTEXT.search(question)
+    wanted = set(terms(question))
+    if not report or not {"politicas", "liquidez"} <= wanted:
+        return None
+    # Las restricciones de alcance incompatibles siguen la recuperación ordinaria.
+    if any(term.isdigit() and term != report[1] for term in wanted):
+        return None
+    coverage = bool(re.search(r"\btodas\s+las\s+pol[ií]ticas\b|\bexhaustiv[oa]\b", question, re.I))
+    measures = bool(re.search(r"\bmedidas\s+de\s+gesti[oó]n\b", question, re.I))
+    if not (coverage or measures):
+        return None
+    subject = {"politicas", "liquidez"}
+    if "tenedora" in wanted:
+        subject.add("tenedora")
+    return report[1], subject, coverage, measures
 
 
 def documentary_query(question):
@@ -317,8 +349,7 @@ class Corpus:
         query = documentary_query(request.query)
         topic = definition_topic(query)
         explain = explanation_terms(query) if not topic else set()
-        source = definition_source(query) if topic else set()
-        search_text = topic if source else query
+        search_text = topic or query
         query_terms = [token for token in terms(search_text) if not explain or token in explain]
         tokens = query_terms[:18]
         if not tokens:
@@ -328,14 +359,19 @@ class Corpus:
             cues = ("se refiere a", "se define como", "consiste en", "es la posibilidad", "es la probabilidad", "pérdida potencial")
             expressions.append(" OR ".join(f'NEAR("{topic}" "{cue}", 12)' for cue in cues))
         expressions.append(" OR ".join(f'"{t}"' for t in tokens))
+        documents = sorted(request.documents) if request.documents is not None else None
+        if documents == []:
+            return []
         with closing(self.connect()) as db:
+            filter_docs = " AND doc IN (" + ",".join("?" for _ in documents) + ")" if documents else ""
             rows = [
                 row
                 for expression in expressions
-                for row in db.execute("""
-                    SELECT doc, page, fragment, body FROM chunks WHERE chunks MATCH ?
-                    ORDER BY bm25(chunks) ASC, doc, page, fragment LIMIT ?
-                """, (expression, request.top_k * 4))
+                for row in db.execute(
+                    "SELECT doc, page, fragment, body FROM chunks WHERE chunks MATCH ?" + filter_docs
+                    + " ORDER BY bm25(chunks) ASC, doc, page, fragment LIMIT ?",
+                    (expression, *(documents or []), request.top_k * 4),
+                )
             ]
         # Rechazar coincidencias débiles antes de presentarlas como evidencia.
         required = math.ceil(len(tokens) * 0.8)
@@ -371,6 +407,47 @@ class Corpus:
                 body = list_under_heading(page, explain) if explain else (definition_under_heading(page, topic) or body)
         return Citation(doc_id=ref.doc_id, filename=name, pdf_page=ref.pdf_page,
                         evidence_id=f"{ref.doc_id}:{ref.pdf_page}:{ref.fragment}", snippet=body)
+
+    def read_section_continuation(self, citation):
+        _, data = self.original(citation.doc_id)
+        with PDF_LOCK, pymupdf.open(stream=data, filetype="pdf") as document:
+            index = citation.pdf_page - 1
+            if index + 1 >= len(document):
+                return None
+            title = citation.snippet.partition(":")[0]
+            lines = sorted(page_lines(document[index]), key=lambda line: line[1])
+            anchor = next((line for line in lines if line[4].rstrip(":") == title), None)
+            if not anchor:
+                return None
+            sections = [(line, match) for line in lines if (match := SECTION.fullmatch(line[4]))
+                        and abs(line[0] - anchor[0]) <= 5]
+            previous = [match for line, match in sections if line[1] < anchor[1] and "liquidez" in terms(match[2])]
+            if not previous or any(line[1] > anchor[1] for line, _ in sections):
+                return None
+            page = document[index + 1]
+            lines = sorted(page_lines(page), key=lambda line: line[1])
+            for position, line in enumerate(lines):
+                heading = SECTION.fullmatch(line[4])
+                if not heading or not heading[1].startswith(previous[-1][1] + ".") or "liquidez" not in terms(heading[2]):
+                    continue
+                paragraph = []
+                bottom = line[3]
+                for x, y, _, end, body in lines[position + 1:]:
+                    if not body:
+                        continue
+                    if abs(x - line[0]) > 8 or y - bottom > 36 or SECTION.fullmatch(body):
+                        break
+                    paragraph.append(body)
+                    bottom = end
+                text = " ".join(paragraph)
+                if not {"liquidez", "gestiona"} <= set(terms(text)) or not text.endswith("."):
+                    continue
+                return citation.model_copy(update={
+                    "pdf_page": citation.pdf_page + 1,
+                    "evidence_id": f"{citation.doc_id}:{citation.pdf_page + 1}:sección",
+                    "snippet": f"{heading[0]}. {text}",
+                })
+        return None
 
     def original(self, doc):
         with closing(self.connect()) as db:
