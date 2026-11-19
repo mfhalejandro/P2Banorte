@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from apps.api.corpus import Citation, Corpus
 from apps.api.finance import Abstain, Operand, Unit, calculate, decimal_from_source, display
-from apps.api.financial_agent import LocalToolDouble, ToolCall, parse_intent
+from apps.api.financial_agent import LocalToolDouble, ToolCall, parse_intent, requires_financial_tools
 from apps.api.main import create_app
 from fixtures import example, report
 
@@ -235,6 +235,37 @@ def test_existing_index_can_open_during_ingestion(corpus):
         writer.execute("DELETE FROM files")
         assert Corpus(corpus.data, corpus.db.parent).catalog() == expected
         writer.rollback()
+
+
+
+@pytest.mark.parametrize(("question", "metric", "periods", "operation", "currency", "scale", "points"), [
+    ("Entre 3T24 y 3T25, ¿en qué porcentaje subió la utilidad neta de Grupo Faro? Cita ambas fuentes.",
+     "utilidad neta", ("3T24", "3T25"), "percent_change", None, None, False),
+    ("Cita la fuente. ¿Cómo cambió el ROE de Grupo Faro entre 3T24 y 3T25? En puntos porcentuales.",
+     "ROE", ("3T24", "3T25"), "difference", None, None, True),
+    ("Sobre la capitalización de mercado en millones de pesos de Grupo Faro, "
+     "¿cuál fue la diferencia entre 1T24 y 2T24?",
+     "capitalización de mercado", ("1T24", "2T24"), "difference", "pesos", "millones", False),
+])
+def test_operation_request_fields(question, metric, periods, operation, currency, scale, points):
+    assert requires_financial_tools(question)
+    intent = parse_intent(question)
+    assert (intent.metric, intent.entity, intent.operation) == (metric, "Grupo Faro", operation)
+    assert (intent.base.label, intent.current.label) == periods
+    assert (intent.output_currency, intent.output_scale, intent.percentage_points) == (currency, scale, points)
+
+
+def test_operational_intent_preserves_conceptual_requests_and_constraints(corpus):
+    assert not requires_financial_tools("¿Qué significa la variación de una tasa?")
+    assert not requires_financial_tools("¿Cómo cambió la política de liquidez de Grupo Faro entre 3T24 y 3T25?")
+    with TestClient(create_app(corpus, financial_provider=LocalToolDouble())) as api:
+        bad_unit = ask(api, "¿Cómo cambió la utilidad neta de Grupo Faro entre 3T24 y 3T25? En puntos porcentuales.")
+        bad_period = ask(api, "¿En qué porcentaje aumentó la utilidad neta de Grupo Faro del 3T24 al 9M25?")
+        missing = ask(api, "¿Cómo cambió la utilidad neta de Grupo Faro?")
+    assert all(row["status"] == "abstained" for row in (bad_unit, bad_period, missing))
+    assert "diferencia entre tasas" in bad_unit["answer"]
+    assert "distinto tipo o duración" in bad_period["answer"]
+    assert "dos periodos distintos" in missing["answer"] and not missing["tools_used"]
 
 
 def test_requested_currency_cannot_be_silently_ignored(corpus):

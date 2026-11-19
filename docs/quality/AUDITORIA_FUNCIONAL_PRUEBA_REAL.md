@@ -82,3 +82,31 @@ Para reproducir también las variantes, usa el ejecutor de aceptación con la op
 ~~~bash
 .venv/bin/python -B tests/financial/evaluate_acceptance.py --data docs/requirements/data --paraphrases > /tmp/p2-aceptacion-parafrasis.jsonl
 ~~~
+
+## Generalización lingüística P01–P08 sobre d747950
+
+La captura inicial sobre el frontend reprodujo cinco fallos. En P01 y P02 la ruta documental era adecuada y FTS no produjo candidatos. P01 mezclaba el emisor con el concepto y conservaba la petición de página en la búsqueda. En P02 el pedido de lista y el calificativo «principales» se habían vuelto términos obligatorios. El fragmento de política usa un encabezado más corto que su sección padre, de modo que exigir «balance» en ese encabezado local también impedía validar la lista. P04–P06 fallaban en el selector financiero. Sus términos de cálculo se enviaban a FTS como si fueran una consulta documental, antes de llegar a extracción o a Decimal.
+
+Ahora la gramática local distingue una operación explícita de una pregunta conceptual y admite el intervalo o el indicador antes de la pregunta. La intención separa indicador, entidad, periodos, moneda, escala y la unidad de puntos porcentuales. Los pedidos de fuentes y formato reconocibles quedan fuera de la interpretación. El cotejo de definición conserva el emisor verificable en el nombre de la fuente y el de listas admite un término que aparezca en una sección padre próxima de la misma columna cuando el encabezado local ya cubre al menos el 80 % del tema. Se conservaron los controles de comparabilidad, moneda, aditividad y Decimal.
+
+| Caso exacto | Antes → después | Resultado y evidencia final | POST antes / después (s) |
+|---|---|---|---:|
+| P01 | FAIL → PASS · recuperación | Definición específica de riesgo de crédito y su encabezado, IA Banorte ESP_16.pdf, PDF p. 29. | 0,275 / 1,196 |
+| P02 | FAIL → PASS · recuperación y contexto de extracción | Tres políticas de la Tenedora. Sección 4, lista parcial, EEFF 2025 Grupo_.pdf, PDF p. 152. | 0,113 / 1,108 |
+| P03 | PASS → PASS | Se abstiene sobre 2035 por falta de respaldo. | 0,113 / 0,164 |
+| P04 | FAIL → PASS · enrutamiento e interpretación porcentual | 14,018 → 14,238 millones de pesos. **+1,57 %**, 3T24.pdf, PDF p. 5, ambas columnas. | 0,084 / 7,966 |
+| P05 | FAIL → PASS · enrutamiento e interpretación de unidad | 22,9 % → 23,6 %, **+0,7 puntos porcentuales**. 4T24_1.pdf y 2T25_vc_.pdf, ambas PDF p. 6 y con la misma definición de ROE. | 0,060 / 8,105 |
+| P06 | FAIL → PASS · enrutamiento e interpretación de alcance | 508,555 → 406,931 millones de pesos, **−101,624 millones**. 2T24.pdf, PDF p. 7, fila de pesos. | 0,111 / 1,963 |
+| P07 | PASS → PASS | Se abstiene por trimestre frente a acumulado; 14,238 y 42,464 se citan como cifras aisladas en 3T24.pdf, PDF p. 5. | 4,593 / 4,596 |
+| P08 | PASS → PASS | Se abstiene antes de consultar herramientas porque el activo total es un saldo no aditivo entre periodos. | 0,007 / 0,010 |
+
+Latencia observada de POST, incluida la transferencia de JSON, antes de cualquier render o contraste semántico. Máximo de los ocho casos corregidos y verificados **8,105 s**. Las pruebas se solaparon con otras regresiones locales. La fase inicial medía cinco abstenciones rápidas debidas a fallos de recuperación o de ruta.
+
+La captura permite cotejar preguntas exactas, ruta efectiva, intención, candidatos, herramientas ejecutadas, cifras y las tres métricas de citas. El verificador abre el original por hash y examina la página, su contexto y los cruces de filas y columnas. La búsqueda de candidatos en la traza se ejecuta localmente para diagnóstico y las herramientas de la respuesta reflejan la ejecución de la API. Las restricciones de emisor y formato están acotadas a patrones verificables. La muestra no establece cobertura de toda formulación ni de todos los documentos de Coder.
+
+~~~bash
+PYTHONPATH=. .venv/bin/python -B tests/financial/evaluate_acceptance.py --operations \
+  --data docs/requirements/data --trace-state "$RAG_STATE_DIR" > /tmp/p2-operaciones.jsonl
+~~~
+
+La ejecución final pasó 28/28 consultas, con dos paráfrasis por categoría y negativos adicionales. Las 34 referencias pasaron acceso, texto y respaldo semántico. El máximo de la batería completa fue 9.230 s (P05). Pasaron 54 pruebas Python, 5 subcasos y 6 pruebas smoke Chromium. La aceptación anterior pasó 11/11 y el control histórico 14/14 con 25/25 PNG.

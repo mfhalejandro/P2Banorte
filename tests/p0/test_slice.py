@@ -98,6 +98,27 @@ def test_definition_requires_the_right_topic_and_preserves_column(corpus):
         assert api.get(f'/api/documents/{citation["doc_id"]}/pages/1/image').headers["content-type"] == "image/png"
 
 
+
+def test_definition_separates_source_constraint_and_citation_instructions(corpus):
+    for issuer in ("Grupo Faro", "Grupo Norte"):
+        with pymupdf.open() as document:
+            document.new_page().insert_text((35, 100), "El riesgo de crédito es la posibilidad de impago.")
+            document.new_page().insert_text((35, 100), f"Publicación de {issuer}.")
+            document.save(corpus.data / f"Informe {issuer}.pdf")
+    corpus.index()
+    with TestClient(create_app(corpus)) as api:
+        for wording in ("¿Cómo se define", "¿Qué significa"):
+            prompt = (f"{wording} el riesgo de crédito en los informes de Grupo Faro? "
+                      "Indica el documento y la página donde figura la definición.")
+            row = api.post("/api/chat", json={"message": prompt}).json()
+            assert row["status"] == "answered" and "posibilidad de impago" in row["answer"]
+            assert row["citations"][0]["filename"] == "Informe Grupo Faro.pdf"
+        missing = api.post("/api/chat", json={
+            "message": "¿Cómo se define el riesgo de crédito en los informes de Grupo Inventado?"
+        }).json()
+        assert missing["status"] == "abstained" and not missing["citations"]
+
+
 def test_explanatory_answers_use_bounded_lists_with_local_context(corpus):
     def policy_pdf(name, heading, item):
         with pymupdf.open() as document:

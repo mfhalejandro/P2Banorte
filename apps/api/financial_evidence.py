@@ -22,9 +22,10 @@ ROW_NOTE = re.compile(r"\s+\((\d{1,2})\)\s*$")
 
 
 class UnverifiedBasis(Abstain):
-    def __init__(self, reason, citation):
+    def __init__(self, reason, citation, entity):
         super().__init__(reason)
         self.citation = citation
+        self.entity = entity
 
 
 def find_candidates(corpus: Corpus, metric: str, period: Period, other: Period | None = None):
@@ -123,7 +124,7 @@ def make_operand(citation, metric, period, original, context, notes, scope, comm
         # Nombrar un evento solo cuando el sustantivo y la entidad figuran juntos.
         subject = " (desconsolidación de Bineo)" if note_citation and BINEO_EVENT.search(note_citation.snippet) else ""
         raise UnverifiedBasis(f"La fuente advierte un cambio de perímetro{subject} sin base común verificada.",
-                              note_citation)
+                              note_citation, next(iter(entities.values())))
     additive = any(normalize(label) == normalize(metric) for label in ADDITIVE.findall(context))
     return Operand(citation=citation, metric=metric, entity=next(iter(entities.values())), period=period,
                    unit=unit_from_context(context, original, scope), basis=next(iter(bases.values())),

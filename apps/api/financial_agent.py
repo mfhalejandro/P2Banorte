@@ -9,7 +9,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .agent import ChatResponse, ProviderUnavailable
-from .corpus import Citation, Corpus, SourceRef
+from .corpus import Citation, Corpus, SourceRef, documentary_query
 from .finance import Abstain, Operand, Operation, PERIOD, Period, calculate, check_stock_sum, display, local_period, normalize
 from .financial_evidence import CURRENCY, UnverifiedBasis, currency_key, find_candidates, read_operand
 
@@ -60,59 +60,109 @@ class Intent:
     inspect: bool
     output_currency: str | None = None
     output_scale: str | None = None
+    percentage_points: bool = False
 
 
 FINANCIAL_VERB = r"(?:compara(?:r)?|calcula(?:r)?|suma(?:r)?(?!\s+(?:de|en|entre)\b))"
-FINANCIAL_CHANGE = r"(?:en\s+)?cu[aá]nto\s+(?:cambi[oó]|vari[oó])"
+CHANGE_VERB = r"(?:cambi[oó]|vari[oó]|aument[oó]|disminuy[oó]|subi[oó]|baj[oó]|creci[oó]|cay[oó]|se\s+(?:increment[oó]|redujo))"
+OPERATION_NOUN = r"(?:variaci[oó]n(?:\s+porcentual)?|diferencia|cambio|comparaci[oó]n|suma|raz[oó]n|ratio)"
+NOMINAL_OPERATION = rf"(?:la\s+|el\s+)?(?P<operation>{OPERATION_NOUN})\s+(?:del?|en|entre)\b"
 FINANCIAL_REQUEST = re.compile(
-    rf"^[\s¿¡]*(?:{FINANCIAL_VERB}\b|{FINANCIAL_CHANGE}\b|"
-    r"(?:(?:cu[aá]l\s+(?:es|fue)\s+)?(?:la\s+|el\s+)?)"
-    r"(?:(?:variaci[oó]n(?:\s+porcentual)?|diferencia|comparaci[oó]n|suma)\s+(?:de|en|entre)|"
-    r"(?:raz[oó]n|ratio)\s+entre)\b)",
+    rf"(?:^|(?<=[.!?;,])\s+|(?=¿))[¿¡\s]*(?:"
+    rf"(?P<relative>en\s+qu[eé]\s+porcentaje\s+{CHANGE_VERB})\b|"
+    rf"(?P<change>(?:c[oó]mo|(?:en\s+)?cu[aá]nto)\s+{CHANGE_VERB})\b|"
+    rf"(?P<verb>{FINANCIAL_VERB})\b|"
+    rf"(?:cu[aá]l\s+(?:fue|es)\s+)?{NOMINAL_OPERATION})",
     re.I,
 )
+POINTS = re.compile(r"\ben\s+puntos\s+porcentuales\b", re.I)
+VALUE_FORMAT = re.compile(r"(?:muestra|indica|incluye)\s+(?:ambos\s+valores|los\s+valores\s+(?:utilizados|originales))", re.I)
+QUALITATIVE_SUBJECT = re.compile(
+    r"^(?:(?:las?|el|los)\s+)?(?:pol[ií]ticas?|procedimientos?|estrategias?|lineamientos?|metodolog[ií]as?)\b",
+    re.I,
+)
+SUBJECT_CONTEXT = re.compile(r"^(?:para|sobre|respecto\s+(?:de|a))\s+(.+?)[,;\s]*$", re.I)
+
+
+@dataclass(frozen=True)
+class FinancialRequest:
+    content: str
+    indicator: str
+    operation: Operation
+    percentage_points: bool
+
+
+def recognize_financial_request(question: str) -> FinancialRequest | None:
+    content = documentary_query(question)
+    content = " ".join(
+        part for part in re.split(r"(?<=[.?!])\s+", content)
+        if not VALUE_FORMAT.fullmatch(part.strip(" ¿¡?!."))
+    )
+    cue = FINANCIAL_REQUEST.search(content)
+    if not cue:
+        return None
+    first_clause = content[:cue.start()].strip(" ¿¡")
+    context = SUBJECT_CONTEXT.fullmatch(first_clause)
+    after_cue = content[cue.end():].strip()
+    operation_word = cue["operation"] or cue["verb"] or ""
+    nominal = re.match(NOMINAL_OPERATION, after_cue, re.I) if cue["verb"] else None
+    if nominal:
+        operation_word = nominal["operation"]
+        after_cue = after_cue[nominal.end():].strip()
+    clause = re.split(r"(?<=[.!?])\s+", after_cue, maxsplit=1)[0]
+    indicator = context[1] if context else PERIOD.split(clause, maxsplit=1)[0]
+    if cue["change"] and QUALITATIVE_SUBJECT.match(indicator):
+        return None
+    points = POINTS.search(content) is not None
+    operation: Operation = "difference"
+    keyword = normalize(operation_word)
+    if keyword.startswith("suma"):
+        operation = "sum"
+    elif keyword in {"razon", "ratio"}:
+        operation = "ratio"
+    elif cue["relative"] or (keyword.startswith("variacion") and not points):
+        operation = "percent_change"
+    return FinancialRequest(content, indicator, operation, points)
 
 
 def requires_financial_tools(question: str) -> bool:
-    """Una petición explícita de cálculo puede llegar sin sus operandos."""
-    return FINANCIAL_REQUEST.match(question) is not None
+    """Una solicitud de operación puede reconocerse antes de validar sus operandos."""
+    return recognize_financial_request(question) is not None
 
 
-def parse_intent(question):
-    matches = list(PERIOD.finditer(question))
+def parse_intent(question: str) -> Intent:
+    missing = "Indica un indicador y dos periodos distintos, por ejemplo «Compara utilidad neta de Grupo Faro entre 3T24 y 3T25»."
+    request = recognize_financial_request(question)
+    if request is None:
+        raise Abstain(missing)
+    matches = list(PERIOD.finditer(request.content))
     periods = list(dict.fromkeys(local_period(match) for match in matches))
-    prefix = PERIOD.split(question, maxsplit=1)[0].strip(" ¿?!:")
-    prefix = re.sub(rf"^(?:{FINANCIAL_CHANGE}|cu[aá]l\s+(?:fue|es)|{FINANCIAL_VERB})\s+", "", prefix, flags=re.I)
-    prefix = re.sub(r"^(?:(?:la |el |los |las )?(?:variación(?: porcentual)?|diferencia|razón|ratio|suma|comparación)\s+(?:de |en |entre )(?:la |el |los |las )?|la |el |los |las )", "", prefix, flags=re.I)
+    prefix = request.indicator.strip(" ¿?!:,")
+    prefix = re.sub(r"^(?:la|el|los|las)\s+", "", prefix, flags=re.I)
     metric_entity = re.sub(r"\s+(?:entre|del|de|en|para)\s*$", "", prefix, flags=re.I).strip()
-    # Las unidades pueden modificar al indicador antes de los periodos o ir al final.
-    inline_unit = re.search(rf"\s+en\s+{CURRENCY.pattern}$", metric_entity, re.I)
-    if inline_unit:
-        metric_entity = metric_entity[:inline_unit.start()]
+    unit_pattern = re.compile(
+        rf"\s+(?:expresad[oa]s?\s+)?en\s+{CURRENCY.pattern}(?=$|\s+de\s+(?:grupo|banco|gfnorte)\b)", re.I,
+    )
+    inline_units = [match.groups() for match in unit_pattern.finditer(metric_entity)]
+    metric_entity = unit_pattern.sub("", metric_entity)
     subject = re.search(r"\s+de\s+((?:grupo|banco|gfnorte)\b.*)$", metric_entity, re.I)
     metric, entity = (metric_entity[:subject.start()], subject[1]) if subject else (metric_entity, "")
     if len(periods) != 2 or not normalize(metric):
-        raise Abstain("Indica un indicador y dos periodos distintos, por ejemplo «Compara utilidad neta de Grupo Faro entre 3T24 y 3T25».")
-    key = question.casefold()
+        raise Abstain(missing)
+    key = request.content.casefold()
     if "acumulad" in key and all(p.kind == "quarter" for p in periods):
         raise Abstain("Indica el periodo acumulado explícitamente, por ejemplo 9M25.")
-    operation: Operation = "difference"
-    for cue, value in (("suma(?:r)?", "sum"), ("razón", "ratio"), ("ratio", "ratio"),
-                       ("variación", "percent_change"), ("porcent", "percent_change")):
-        if re.search(r"\b" + cue, key):
-            operation = value
-            break
-    ending = question[matches[-1].end():]
+    if request.percentage_points and request.operation != "difference":
+        raise Abstain("La unidad solicitada exige una diferencia entre tasas, con dos tasas comparables.")
+    ending = request.content[matches[-1].end():]
     units = [match.groups() for match in re.finditer(rf"\ben\s+{CURRENCY.pattern}", ending, re.I)]
-    if inline_unit:
-        units.append(inline_unit.groups())
+    units.extend(inline_units)
     currencies = {currency_key(name) for _, name in units}
     scales = {scale.lower() for scale, _ in units if scale}
-    if len(currencies) > 1 or len(scales) > 1:
+    if len(currencies) > 1 or len(scales) > 1 or (request.percentage_points and units):
         raise Abstain("La consulta especifica unidades o monedas incompatibles.")
-    currency = next(iter(currencies), None)
-    scale = next(iter(scales), None)
-    return Intent(metric, entity or None, *periods, operation, "inspecciona" in key, currency, scale)
+    return Intent(metric, entity or None, *periods, request.operation, "inspecciona" in key,
+                  next(iter(currencies), None), next(iter(scales), None), request.percentage_points)
 
 
 @dataclass
@@ -249,7 +299,10 @@ class FinancialAgent:
             except (RuntimeError, OSError):
                 trace.rejected[params.period] = "No se pudo leer la página original."
             except UnverifiedBasis as exc:
-                trace.basis_warnings.setdefault(params.period, (str(exc), exc.citation))
+                if intent.entity and normalize(intent.entity) != normalize(exc.entity):
+                    trace.rejected[params.period] = "La entidad de la fuente difiere de la solicitada."
+                else:
+                    trace.basis_warnings.setdefault(params.period, (str(exc), exc.citation))
             except Abstain as exc:
                 trace.rejected[params.period] = str(exc)
             else:
@@ -274,6 +327,8 @@ class FinancialAgent:
                     raise Abstain("La evidencia no acredita la moneda solicitada. Indica una moneda respaldada por los originales.")
                 if intent.output_scale and not current.unit.label.lower().startswith(intent.output_scale):
                     raise Abstain("El cálculo está respaldado en otra escala. Consulta en la escala indicada en las fuentes.")
+            if intent.percentage_points and any(item.unit.label != "%" for item in (base, current)):
+                raise Abstain("La unidad solicitada exige una diferencia entre tasas, con dos tasas comparables.")
             trace.result = base, current, calculate(params.operation, base, current)
 
     @staticmethod

@@ -53,28 +53,39 @@ DEFINITION_LEAD = re.compile(
 )
 
 
+DEFINITION_SOURCE = re.compile(
+    r"\s+en\s+(?:los\s+)?(?:informes?|reportes?|documentos?)\s+de\s+(.+)$", re.I,
+)
+
+
+def definition_source(question):
+    match = DEFINITION_SOURCE.search(question.rstrip(" ?!."))
+    return set(terms(match[1])) if match else set()
+
+
 def definition_topic(question):
     prompt = DEFINITION_PROMPT.search(question)
     if not prompt:
         return ""
-    tail = question[prompt.end():]
-    return " ".join(re.findall(r"[^\W_]+", re.sub(r"^\s*(?:la|el|las|los|una|un)\s+", "", tail, flags=re.I))[:18])
+    tail = DEFINITION_SOURCE.sub("", question[prompt.end():].rstrip(" ?!."))
+    tail = re.sub(r"^\s*(?:la|el|las|los|una|un)\s+", "", tail, flags=re.I)
+    return " ".join(re.findall(r"[^\W_]+", tail)[:18])
 
 
-SOURCE_FIELD = r"(?:(?:el|la|los|las|su|sus)\s+)?(?:documentos?|fuentes?|p[aá]ginas?)"
+SOURCE_FIELD = r"(?:(?:el|la|los|las|su|sus|amb[oa]s)\s+)?(?:documentos?|fuentes?|p[aá]ginas?)"
 SOURCE_FIELDS = rf"{SOURCE_FIELD}(?:\s+(?:y|e)\s+{SOURCE_FIELD}){{0,2}}"
-PER_ITEM = r"cada\s+(?:un[oa]|pol[ií]tica|elemento|punto)"
+PER_ITEM = r"(?:cada\s+(?:un[oa]|pol[ií]tica|elemento|punto)|la\s+definici[oó]n)"
 SOURCE_VERB = r"(?:indica|señala|cita|incluye|especifica|identifica)"
 PRESENTATION_CLAUSE = re.compile(
-    rf"(?:{SOURCE_VERB}\s+(?:{SOURCE_FIELDS}(?:\s+(?:de|para)\s+{PER_ITEM})?"
+    rf"(?:{SOURCE_VERB}\s+(?:{SOURCE_FIELDS}(?:\s+(?:de|para)\s+{PER_ITEM}|\s+donde\s+(?:aparece|figura)\s+{PER_ITEM})?"
     rf"|en\s+qu[eé]\s+{SOURCE_FIELDS}\s+(?:se\s+encuentra|aparece)\s+{PER_ITEM})"
     rf"|con\s+{SOURCE_FIELDS}(?:\s+(?:de|para)\s+{PER_ITEM})?"
     r"|(?:enumera|lista)\s+(?:las\s+)?(?:pol[ií]ticas|medidas|referencias)\s+identificadas"
     r"|enum[eé]ralas|l[ií]stalas"
-    r"|(?:responde|presenta(?:\s+la\s+respuesta)?|enumera)\s+en\s+(?:viñetas|una\s+lista|formato\s+de\s+lista))",
+    r"|(?:responde|presenta(?:\s+la\s+respuesta)?|pres[eé]ntal[oa]s|enumera)\s+en\s+(?:viñetas|una\s+lista|formato\s+de\s+lista))",
     re.I,
 )
-CLAUSE_BOUNDARY = re.compile(rf"(?<=[.!?])\s+|[;\n]\s*|,\s+|\s+(?:y|e)\s+(?={SOURCE_VERB}\b)", re.I)
+CLAUSE_BOUNDARY = re.compile(rf"(?<=[.!?,])\s+|[;\n]\s*|\s+(?:y|e)\s+(?={SOURCE_VERB}\b)", re.I)
 EXPLANATION_PROMPT = re.compile(
     r"^[¿\s]*(?:qu[eé]\s+(.+?)\s+se\s+(?:mencionan|describen|enumeran|indican|identifican)\b(.*)"
     r"|(?:cu[aá]les\s+son|describe|enumera|explica)\s+(.+))$", re.I,
@@ -86,7 +97,7 @@ def documentary_query(question):
     """Eliminar solo cláusulas completas de presentación. Conservar cualquier restricción."""
     return " ".join(
         clause for clause in CLAUSE_BOUNDARY.split(question.strip())
-        if clause and not PRESENTATION_CLAUSE.fullmatch(clause.strip(" ¿¡?!."))
+        if clause and not PRESENTATION_CLAUSE.fullmatch(clause.strip(" ¿¡?!.,"))
     )
 
 
@@ -95,7 +106,9 @@ def explanation_terms(question):
     prompt = EXPLANATION_PROMPT.match(question)
     if prompt is None:
         return set()
-    return set(terms(prompt[3] or f"{prompt[1]} {prompt[2]}"))
+    subject = prompt[3] or f"{prompt[1]} {prompt[2]}"
+    subject = re.sub(r"^(?:(?:las|los)\s+)?principales\s+", "", subject, flags=re.I)
+    return set(terms(subject))
 
 
 def page_lines(page):
@@ -109,8 +122,17 @@ def page_lines(page):
 def list_under_heading(page, wanted):
     lines = sorted((line for line in page_lines(page) if line[4]), key=lambda line: (line[1], line[0]))
     for left, _, _, bottom, title in lines:
-        if not title.endswith(":") or not wanted <= set(terms(title)):
+        if not title.endswith(":"):
             continue
+        title_terms = set(terms(title))
+        if not wanted <= title_terms:
+            # Un encabezado local puede omitir parte del tema que figura en la sección padre.
+            section = next((body for x, y, _, end, body in reversed(lines)
+                            if abs(x - left) <= 5 and 0 < bottom - end <= 230
+                            and re.match(r"^\d+(?:\.\d+)*\.?\s+\D", body) and not body.endswith(".")), "")
+            heading = re.sub(r"^\d+(?:\.\d+)*\.?\s+", "", section)
+            if len(wanted & title_terms) < math.ceil(len(wanted) * 0.8) or not wanted <= title_terms | set(terms(heading)):
+                continue
         # La primera viñeta debe estar próxima al encabezado y en la misma columna.
         markers = [line for line in lines if left - 4 <= line[0] <= left + 36
                    and line[1] >= bottom - 2 and LIST_MARK.match(line[4])]
@@ -295,7 +317,9 @@ class Corpus:
         query = documentary_query(request.query)
         topic = definition_topic(query)
         explain = explanation_terms(query) if not topic else set()
-        query_terms = [token for token in terms(query) if not explain or token in explain]
+        source = definition_source(query) if topic else set()
+        search_text = topic if source else query
+        query_terms = [token for token in terms(search_text) if not explain or token in explain]
         tokens = query_terms[:18]
         if not tokens:
             return []
@@ -329,7 +353,7 @@ class Corpus:
                 break
         return matches
 
-    def read_source(self, ref: SourceRef, *, topic="", explain=None):
+    def read_source(self, ref: SourceRef, *, topic="", explain=None, source=None):
         with closing(self.connect()) as db:
             row = db.execute("""
                 SELECT body
@@ -339,7 +363,9 @@ class Corpus:
             raise KeyError("Evidencia desconocida")
         name, data = self.original(ref.doc_id)
         body = row["body"]
-        if topic or explain:
+        if source and not source <= set(terms(name)):
+            body = ""
+        elif topic or explain:
             with PDF_LOCK, pymupdf.open(stream=data, filetype="pdf") as pdf:
                 page = pdf[ref.pdf_page - 1]
                 body = list_under_heading(page, explain) if explain else (definition_under_heading(page, topic) or body)

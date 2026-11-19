@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from .corpus import Citation, Corpus, SearchRequest, DEFINITION_LEAD, definition_topic, documentary_query, explanation_terms, terms
+from .corpus import Citation, Corpus, SearchRequest, DEFINITION_LEAD, definition_source, definition_topic, documentary_query, explanation_terms, terms
 
 
 class ChatRequest(BaseModel):
@@ -99,7 +99,10 @@ class Agent:
             observed = {}
             topic = definition_topic(query)
             explain = explanation_terms(query) if not topic else set()
-            read_source = partial(self.corpus.read_source, topic=topic, explain=explain) if topic or explain else self.corpus.read_source
+            read_source = (
+                partial(self.corpus.read_source, topic=topic, explain=explain, source=definition_source(query) if topic else None)
+                if topic or explain else self.corpus.read_source
+            )
             for ref in found[:4]:
                 citation = await call("read_source", read_source, ref)
                 if citation.snippet:

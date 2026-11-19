@@ -68,6 +68,14 @@
 
 **Aceptación.** Probar una pregunta breve y al menos tres formulaciones equivalentes que cambien el orden de las instrucciones. Cotejar los mismos elementos, la entidad y la página física. Repetir una variante con un periodo inexistente y comprobar que se abstiene. Verificar también que los casos financieros de moneda y comparabilidad conservan sus resultados. **Impacto.** Incluye 5 minutos del bloque de aceptación T+140–165, dentro del tiempo ya reservado para la muestra.
 
+### Hallazgo posterior · Generalización de intención operativa
+
+**Aplica a** PRD RF-03, RF-07, RF-08, RF-09 y §9, y TASK T-05/T-07/T-13. En la batería P01–P08, formulaciones naturales de porcentaje, diferencia entre tasas y comparación monetaria llegaron al flujo documental. Dos preguntas documentales no separaron el alcance de la fuente y el marco de su encabezado de los pedidos de presentación.
+
+> Determina la intención por la operación solicitada y sus argumentos aunque el indicador, la entidad, la unidad o el intervalo aparezcan antes de la pregunta. Separa operación, indicador, entidad, periodos, moneda, escala y formato. Reconoce la diferencia entre variación relativa y diferencia entre tasas en puntos porcentuales. Las restricciones incompatibles requieren aclaración o abstención antes de devolver un cálculo. Para consultas documentales, valida emisor, tema y encabezado dentro del contexto original y conserva la cita de cada afirmación. Indica selección parcial si el modo extractivo no acredita exhaustividad.
+
+**Aceptación.** En el entorno de la prueba, usa preguntas naturales definidas contra el corpus real. Incluye definición con emisor, lista contextualizada, variación relativa, diferencia en puntos porcentuales, comparación monetaria y abstenciones por futuro, periodo y stock. Para cada categoría prueba dos paráfrasis con distinto orden. Registra ruta, intención normalizada, evidencia, resultado, unidad y tiempo individual y máximo. Comprueba que cambios de moneda, entidad o periodo sigan siendo vinculantes. **Impacto.** Incluye las variantes dentro de la muestra de aceptación T+140–165 y usa los tiempos medidos para recortar trabajo opcional.
+
 ## Plan operativo de 180 minutos
 
 La reutilización de código e índice depende de las reglas de Coder y de si el estado corresponde a los archivos autorizados. El catálogo real constituye una entrega distinta del ensayo.

@@ -58,3 +58,7 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | Seguimiento | Evidencia | Resultado |
 |---|---|---|
 | PRD RF-03/RF-10 y SPEC-001-AC-01/03/06 | D02a–D02d y D03a comprueban paráfrasis, orden de instrucciones, contexto de la Tenedora, fuente y año. | VERIFIED localmente. |
+
+| Generalización | Evidencia | Resultado |
+|---|---|---|
+| PRD RF-03, RF-07 a RF-10 y T-05/T-07/T-13 | P01–P08, paráfrasis, restricciones negativas y validación semántica del original. | VERIFIED en la muestra local. [Auditoría](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md) |
