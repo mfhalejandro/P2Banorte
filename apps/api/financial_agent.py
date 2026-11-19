@@ -85,6 +85,10 @@ def parse_intent(question):
     prefix = re.sub(rf"^(?:{FINANCIAL_CHANGE}|cu[aá]l\s+(?:fue|es)|{FINANCIAL_VERB})\s+", "", prefix, flags=re.I)
     prefix = re.sub(r"^(?:(?:la |el |los |las )?(?:variación(?: porcentual)?|diferencia|razón|ratio|suma|comparación)\s+(?:de |en |entre )(?:la |el |los |las )?|la |el |los |las )", "", prefix, flags=re.I)
     metric_entity = re.sub(r"\s+(?:entre|del|de|en|para)\s*$", "", prefix, flags=re.I).strip()
+    # Las unidades pueden modificar al indicador antes de los periodos o ir al final.
+    inline_unit = re.search(rf"\s+en\s+{CURRENCY.pattern}$", metric_entity, re.I)
+    if inline_unit:
+        metric_entity = metric_entity[:inline_unit.start()]
     subject = re.search(r"\s+de\s+((?:grupo|banco|gfnorte)\b.*)$", metric_entity, re.I)
     metric, entity = (metric_entity[:subject.start()], subject[1]) if subject else (metric_entity, "")
     if len(periods) != 2 or not normalize(metric):
@@ -99,14 +103,15 @@ def parse_intent(question):
             operation = value
             break
     ending = question[matches[-1].end():]
-    requested_unit = re.search(r"\ben\s+", ending, re.I)
-    currency, scale = None, None
-    if requested_unit:
-        match = CURRENCY.match(ending, requested_unit.end())
-        if match:
-            scale, name = match.groups()
-            currency = currency_key(name)
-            scale = scale.lower() if scale else None
+    units = [match.groups() for match in re.finditer(rf"\ben\s+{CURRENCY.pattern}", ending, re.I)]
+    if inline_unit:
+        units.append(inline_unit.groups())
+    currencies = {currency_key(name) for _, name in units}
+    scales = {scale.lower() for scale, _ in units if scale}
+    if len(currencies) > 1 or len(scales) > 1:
+        raise Abstain("La consulta especifica unidades o monedas incompatibles.")
+    currency = next(iter(currencies), None)
+    scale = next(iter(scales), None)
     return Intent(metric, entity or None, *periods, operation, "inspecciona" in key, currency, scale)
 
 

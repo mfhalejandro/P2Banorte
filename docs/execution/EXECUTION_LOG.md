@@ -131,3 +131,11 @@ En `financial-local`, `/api/chat` separa las peticiones financieras explícitas 
 | Chromium contra 5194 y verificación de salud en 8194 | PASS · Biblioteca de 24 documentos. Riesgo de crédito y políticas de liquidez con evidencia de P0. Comparación GFNorte 2T24 a 3T24 de +220 millones de pesos con dos citas. Solicitud incompleta con aclaración y trimestre frente a acumulado con abstención. Seis citas abiertas en el visor. |
 
 Las métricas del simulacro cerrado se conservan. AC-06 permanece NOT RUN. La corrección se verificó localmente.
+
+## 2026-11-19 16:06 CDMX · Auditoría funcional previa a la prueba real
+
+Codex reanudó en 7f37024 con HEAD y origin/main alineados, árbol e índice Git limpios. El preflight confirmó integridad, aislamiento y escritura fuera de los originales. Se mantuvieron la API y Vite independientes y se reutilizó el índice de los 24 PDF.
+
+Se capturaron las seis respuestas antes de aplicar cambios. D02 y F02 quedaron PARTIAL y F01 FAIL. Tras corregir extracción, alcance, unidad y evidencia de perímetro, el ejecutor de aceptación local y Chromium pasaron los seis casos. Se verificaron 6/6 citas accesibles, 6/6 textuales y 6/6 semánticas de esa muestra. La regresión Python pasó 48 pruebas y 5 subcasos. El smoke aislado pasó 6 pruebas. El ejecutor de robustez reprodujo 14/14 y 25/25 PNG. R11 conserva la abstención con el párrafo de la advertencia.
+
+La evidencia de hoy es posterior al cierre de las 15:25. Se conservan la arquitectura V3 y las métricas históricas. El propietario debe revisar la propuesta RCTF y la decisión sobre inferencia. SPEC-002-AC-06 sigue NOT RUN. [Informe, comandos y oráculos](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md) · [Propuesta y plan](../quality/PROPUESTA_RCTF_PRUEBA_REAL.md)

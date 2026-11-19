@@ -61,13 +61,69 @@ def definition_topic(question):
     return " ".join(re.findall(r"[^\W_]+", re.sub(r"^\s*(?:la|el|las|los|una|un)\s+", "", tail, flags=re.I))[:18])
 
 
-def definition_under_heading(page, topic):
-    wanted = terms(topic)
+EXPLANATION_PROMPT = re.compile(
+    r"^[¿\s]*(?:qu[eé]\s+(.+?)\s+se\s+(?:mencionan|describen|enumeran|indican)[?\s]*$"
+    r"|(?:describe|enumera|explica)\s+(.+?)[.!?\s]*$)", re.I,
+)
+LIST_MARK = re.compile(r"^([•●▪–·])(?:\s+|$)")
+
+
+def explanation_terms(question):
+    prompt = EXPLANATION_PROMPT.match(question)
+    return set(terms(prompt[1] or prompt[2])) if prompt else set()
+
+
+def page_lines(page):
     blocks = page.get_text("dict", flags=pymupdf.TEXTFLAGS_DICT & ~pymupdf.TEXT_PRESERVE_IMAGES)["blocks"]
-    lines = [
+    return [
         (*line["bbox"], " ".join("".join(span["text"] for span in line["spans"]).split()))
         for block in blocks for line in block.get("lines", []) if line["dir"] == (1.0, 0.0)
     ]
+
+
+def list_under_heading(page, wanted):
+    lines = sorted((line for line in page_lines(page) if line[4]), key=lambda line: (line[1], line[0]))
+    for left, _, _, bottom, title in lines:
+        if not title.endswith(":") or not wanted <= set(terms(title)):
+            continue
+        # La primera viñeta debe estar próxima al encabezado y en la misma columna.
+        markers = [line for line in lines if left - 4 <= line[0] <= left + 36
+                   and line[1] >= bottom - 2 and LIST_MARK.match(line[4])]
+        if not markers or markers[0][1] - bottom > 24:
+            continue
+        indent = markers[0][0]
+        markers = [line for line in markers if abs(line[0] - indent) <= 5]
+        items = []
+        for index, (left_mark, top, right, mark_bottom, marked) in enumerate(markers[:6]):
+            if top - bottom > 24:
+                break
+            content = LIST_MARK.sub("", marked).strip()
+            text_left = left_mark
+            if not content:
+                first = min((line for line in lines if 0 <= line[0] - right <= 28 and abs(top - line[1]) <= 3),
+                            key=lambda line: line[0], default=None)
+                if first is None:
+                    break
+                text_left, _, _, mark_bottom, content = first
+            next_top = markers[index + 1][1] if index + 1 < len(markers) else page.rect.height
+            bottom = mark_bottom
+            for x, y, _, end, line in lines:
+                if not content.endswith((".", ";", ":", "!", "?")) and abs(x - text_left) <= 5 and bottom - 2 <= y < next_top - 2 and y - bottom <= 16:
+                    if LIST_MARK.match(line) or re.fullmatch(r"\d+", line):
+                        break
+                    content += " " + line
+                    bottom = end
+            if not content.endswith((".", ";", "!", "?")) or not terms(content):
+                break
+            items.append(content)
+        if items:
+            return title + " " + " ".join(f"• {item}" for item in items)
+    return ""
+
+
+def definition_under_heading(page, topic):
+    wanted = terms(topic)
+    lines = page_lines(page)
     for left, _, _, bottom, title in lines:
         if terms(title) != wanted:
             continue
@@ -233,17 +289,20 @@ class Corpus:
         required = math.ceil(len(tokens) * 0.8)
         required_numbers = {t for t in tokens if any(c.isdigit() for c in t)}
         matches = []
+        explain = not topic and explanation_terms(request.query)
         for row in rows:
             common = set(tokens).intersection(terms(row["body"]))
             if len(common) >= required and required_numbers <= common:
                 ref = SourceRef(doc_id=row["doc"], pdf_page=row["page"], fragment=row["fragment"])
-                if ref not in matches:
+                if ref not in matches and (
+                    not explain or all((ref.doc_id, ref.pdf_page) != (match.doc_id, match.pdf_page) for match in matches)
+                ):
                     matches.append(ref)
             if len(matches) == request.top_k:
                 break
         return matches
 
-    def read_source(self, ref: SourceRef, *, topic=""):
+    def read_source(self, ref: SourceRef, *, topic="", explain=None):
         with closing(self.connect()) as db:
             row = db.execute("""
                 SELECT body
@@ -253,10 +312,10 @@ class Corpus:
             raise KeyError("Evidencia desconocida")
         name, data = self.original(ref.doc_id)
         body = row["body"]
-        if topic:
+        if topic or explain:
             with PDF_LOCK, pymupdf.open(stream=data, filetype="pdf") as pdf:
-                definition = definition_under_heading(pdf[ref.pdf_page - 1], topic)
-            body = definition or body
+                page = pdf[ref.pdf_page - 1]
+                body = list_under_heading(page, explain) if explain else (definition_under_heading(page, topic) or body)
         return Citation(doc_id=ref.doc_id, filename=name, pdf_page=ref.pdf_page,
                         evidence_id=f"{ref.doc_id}:{ref.pdf_page}:{ref.fragment}", snippet=body)
 

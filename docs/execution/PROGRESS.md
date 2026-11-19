@@ -13,3 +13,5 @@ Los 5/14 y 11/14 son mediciones históricas. El 14/14 corresponde al cierre publ
 Las instrucciones de instalación y ejecución se mantienen en el [README](../../README.md). El [sprint](SPRINTS.md) registra qué se verificó para el cierre.
 
 **Mantenimiento posterior al cierre, VERIFIED localmente.** La demo de 24 PDF recuperó API y web en unidades independientes. P0 y SPEC-002 comparten el índice y se seleccionan por consulta en el modo financiero local. [Verificación posterior al cierre](EXECUTION_LOG.md)
+
+**Auditoría previa a la prueba real, VERIFIED en la muestra local.** Se corrigieron la contaminación por folio en listas, la unidad financiera antepuesta a los periodos y el extracto de la advertencia de Bineo. Pasan los seis nuevos casos y los 14 de robustez reejecutados. La generalización a la entrega de Coder sigue PARTIAL. La propuesta RCTF queda pendiente de revisión humana. [Auditoría](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md) · [Propuesta y reloj operativo](../quality/PROPUESTA_RCTF_PRUEBA_REAL.md)

@@ -12,7 +12,8 @@ from .market_table import MARKET_ROW, is_market_metric, market_cells
 ENTITY = re.compile(r"(?im)^\s*(?:tabla comparativa\s*[-–]\s*)?(?:entidad\s*:\s*([^\n|]+)|((?:grupo|banco)\s+[^\n|]+?)\s+(?:no\s+)?consolidad[oa]\b|(GFNorte)\s*[-–,])")
 BASIS = re.compile(r"\b(?:no\s+)?consolidad[oa](?:\s+con\s+subsidiarias)?\b", re.I)
 CURRENCY = re.compile(r"\b(?:(millones|miles)(?:\s+de)?\s+)?(MXN|USD|EUR|pesos(?:\s+mexicanos)?|d[oó]lares(?:\s+estadounidenses)?|euros)\b", re.I)
-NOTE = re.compile(r"\b(?:desconsolida\w*|reexpres\w*|cambio de perímetro|operaciones discontinuadas)\b", re.I)
+NOTE = re.compile(r"\b(?:desconsolid\w*|reexpres\w*|cambio de perímetro|operaciones discontinuadas)\b", re.I)
+BINEO_EVENT = re.compile(r"\bdesconsolid\w*\s+(?:(?:la|su)\s+operaci[oó]n\s+)?de\s+Bineo\b", re.I)
 COMMON = re.compile(r"(?im)^base comparable\s*:\s*([^\n|]+)")
 ADDITIVE = re.compile(r"(?im)^magnitud aditiva\s*:\s*([^\n|]+)")
 TABULAR_LINES = re.compile(r"\s+")
@@ -120,8 +121,7 @@ def make_operand(citation, metric, period, original, context, notes, scope, comm
     basis = COMMON.search(notes)
     if note and not basis:
         # Nombrar un evento solo cuando el sustantivo y la entidad figuran juntos.
-        has_bineo_note = re.search(r"desconsolida\w*\s+de\s+Bineo\b", notes, re.I)
-        subject = " (Bineo)" if has_bineo_note else ""
+        subject = " (desconsolidación de Bineo)" if note_citation and BINEO_EVENT.search(note_citation.snippet) else ""
         raise UnverifiedBasis(f"La fuente advierte un cambio de perímetro{subject} sin base común verificada.",
                               note_citation)
     additive = any(normalize(label) == normalize(metric) for label in ADDITIVE.findall(context))
@@ -261,17 +261,29 @@ def read_operand(corpus, ref, metric, period, *, other=None, requested_currency=
     with PDF_LOCK, pymupdf.open(stream=original, filetype="pdf") as document:
         page = document[ref.pdf_page - 1]
         indices = sorted({*range(min(len(document), 4)), *range(max(0, page.number - 1), min(len(document), page.number + 2))})
-        note_hits = [(index, NOTE.search(document[index].get_text())) for index in indices]
-        found_notes = [index for index, match in note_hits if match]
+        note_hits = []
+        suspected_pages = []
+        for index in indices:
+            note_page = document[index]
+            if NOTE.search(note_page.get_text()):
+                suspected_pages.append(index)
+            for *_, paragraph, _, kind in note_page.get_text("blocks"):
+                excerpt = " ".join(paragraph.split())
+                if not kind and NOTE.search(excerpt) and re.search(r"[.!?]$", excerpt):
+                    score = (bool(re.search(r"\bno (?:son |es )?comparable", excerpt, re.I)),
+                             bool(BINEO_EVENT.search(excerpt)), index == page.number)
+                    note_hits.append((score, index, excerpt))
         note_citation = None
         notes = page.get_text()
-        if found_notes:
-            index = page.number if page.number in found_notes else found_notes[0]
+        if note_hits:
+            _, index, excerpt = max(note_hits, key=lambda hit: hit[0])
             notes += "\n" + document[index].get_text()
             note_citation = citation.model_copy(update={
                 "pdf_page": index + 1, "evidence_id": f"{ref.doc_id}:{index + 1}:nota",
-                "snippet": "Nota sobre base contable o perímetro.",
+                "snippet": excerpt,
             })
+        elif suspected_pages:
+            notes += "\n" + document[suspected_pages[0]].get_text()
         if is_market_metric(metric):
             return market_operand(document, page, citation, metric, period, other,
                                   requested_currency, requested_scale, notes, note_citation)

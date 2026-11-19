@@ -283,9 +283,11 @@ def test_abstention_cites_reexpression_without_using_flagged_operand(corpus):
     with TestClient(create_app(corpus, financial_provider=LocalToolDouble())) as api:
         result = ask(api)
     assert result["status"] == "abstained" and "cambio de perímetro" in result["answer"]
-    assert "123.40" not in result["answer"]
-    assert any(c["filename"] == "B-consultado.pdf" and c["pdf_page"] == 2 and c["evidence_id"].endswith(":nota")
-               for c in result["citations"])
+    assert "123.40" not in result["answer"] and "desconsolidación de Bineo" in result["answer"]
+    notes = [c for c in result["citations"] if c["evidence_id"].endswith(":nota")]
+    assert [(c["filename"], c["pdf_page"], c["snippet"]) for c in notes] == [
+        ("B-consultado.pdf", 2, "La desconsolidación de Bineo cambia la base de las cifras."),
+    ]
 
 
 def market_report(path, layout, *, duplicate_period=False, reverse_rows=False):
@@ -341,6 +343,26 @@ def test_market_capitalization_matches_period_and_currency(tmp_path, currency, e
             assert cite["filename"] == "tabla-variable.pdf" and cite["pdf_page"] == 2
             url = f'/api/documents/{cite["doc_id"]}/pages/2/image'
             assert api.get(url).content.startswith(b"\x89PNG")
+
+
+def test_market_unit_before_periods_and_conflicting_suffix(tmp_path):
+    data = tmp_path / "inputs"
+    data.mkdir()
+    market_report(data / "tabla.pdf", [
+        (275, "1T24", "30,761", "508,555"),
+        (365, "2T24", "22,300", "406,931"),
+        (441, "3T23", "23,762", "407,173"),
+    ])
+    corpus = Corpus(data, tmp_path / "state")
+    corpus.index()
+    with TestClient(create_app(corpus, financial_provider=LocalToolDouble())) as api:
+        question = "Compara la capitalización de mercado en millones de dólares entre 1T24 y 2T24"
+        answer = ask(api, question + ". Indica ambos valores, la diferencia y las fuentes.")
+        conflict = ask(api, question + " en millones de pesos")
+    assert answer["status"] == "answered" and len(answer["citations"]) == 2
+    assert all("dólares" in item["snippet"] for item in answer["citations"])
+    assert conflict["status"] == "abstained" and "incompatibles" in conflict["answer"]
+    assert not conflict["tools_used"] and not conflict["citations"]
 
 
 @pytest.mark.parametrize("ambiguous", ["moneda", "periodo"])

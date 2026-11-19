@@ -98,6 +98,43 @@ def test_definition_requires_the_right_topic_and_preserves_column(corpus):
         assert api.get(f'/api/documents/{citation["doc_id"]}/pages/1/image').headers["content-type"] == "image/png"
 
 
+def test_explanatory_answers_use_bounded_lists_with_local_context(corpus):
+    def policy_pdf(name, heading, item):
+        with pymupdf.open() as document:
+            page = document.new_page()
+            page.insert_text((36, 120), heading)
+            page.insert_text((320, 120), "Riesgo de mercado:")
+            if item:
+                page.insert_text((50, 143), "• " + item)
+            page.insert_text((335, 143), "• Insertar un dato ajeno.")
+            page.insert_text((540, 787), "150")
+            document.save(corpus.data / name)
+
+    policy_pdf("Objetivos.pdf", "Políticas y objetivos generales:", "Emitir un informe de gestión.")
+    policy_pdf("Sin respaldo.pdf", "Políticas de liquidez:", None)
+    corpus.index()
+    question = {"message": "¿Qué políticas de liquidez se mencionan?"}
+    with TestClient(create_app(corpus)) as api:
+        result = api.post("/api/chat", json=question).json()
+        assert result["status"] == "abstained" and result["citations"] == []
+
+    policy_pdf("A.pdf", "Políticas de liquidez de grupo:", "Medir la liquidez todos los días.")
+    policy_pdf("B.pdf", "Políticas de liquidez de banca:", "Establecer límites de liquidez.")
+    corpus.index()
+    with TestClient(create_app(corpus)) as api:
+        result = api.post("/api/chat", json=question).json()
+        future = api.post("/api/chat", json={"message": "¿Qué políticas de liquidez adoptarán en el año 2035?"}).json()
+    assert result["status"] == "answered"
+    assert "selección es parcial" in result["answer"]
+    assert "150" not in result["answer"] and "dato ajeno" not in result["answer"]
+    assert len(result["citations"]) == 2 and result["tools_used"].count("read_source") <= 4
+    expected = {"A.pdf": "Medir la liquidez todos los días.", "B.pdf": "Establecer límites de liquidez."}
+    for citation in result["citations"]:
+        assert citation["pdf_page"] == 1 and citation["snippet"] in result["answer"]
+        assert expected[citation["filename"]] in citation["snippet"]
+    assert future["status"] == "abstained" and future["citations"] == []
+
+
 def test_changed_and_escaped_original(corpus, tmp_path):
     old = corpus.catalog()[0]["doc_id"]
     write_pdf(tmp_path / "nuevo.pdf", ["Página distinta."])

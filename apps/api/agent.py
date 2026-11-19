@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from .corpus import Citation, Corpus, SearchRequest, DEFINITION_LEAD, definition_topic, terms
+from .corpus import Citation, Corpus, SearchRequest, DEFINITION_LEAD, definition_topic, explanation_terms, terms
 
 
 class ChatRequest(BaseModel):
@@ -87,13 +87,22 @@ class Agent:
             found = await call("search_corpus", self.corpus.search_corpus, SearchRequest(query=question))
             observed = {}
             topic = definition_topic(question)
-            read_source = partial(self.corpus.read_source, topic=topic) if topic else self.corpus.read_source
+            explain = explanation_terms(question) if not topic else set()
+            read_source = partial(self.corpus.read_source, topic=topic, explain=explain) if topic or explain else self.corpus.read_source
             for ref in found[:4]:
                 citation = await call("read_source", read_source, ref)
-                observed[citation.evidence_id] = citation
+                if citation.snippet:
+                    observed[citation.evidence_id] = citation
             if observed:
                 selected = await self.provider.select(question, list(observed.values()))
                 if selected in observed:
                     citation = observed[selected]
+                    if explain:
+                        primary = citation.snippet.partition(":")[0]
+                        extra = next((item for item in observed.values()
+                                      if item.snippet.partition(":")[0].casefold() != primary.casefold()), None)
+                        citations = [citation, extra] if extra else [citation]
+                        answer = "En los fragmentos verificados se encontró la siguiente información. La selección es parcial. "
+                        return result("answered", answer + " ".join(item.snippet for item in citations), citations)
                     return result("answered", passage(question, citation.snippet), [citation])
             return result("abstained", "No encontré evidencia suficiente en los documentos indexados para responder a esta pregunta.", [])

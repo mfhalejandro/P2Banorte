@@ -44,3 +44,13 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | Criterio | Evidencia | Resultado |
 |---|---|---|
 | SPEC-001-AC-01/03/06, SPEC-002-AC-01/03/05 | Regresiones de enrutamiento, definiciones con columna, aclaración y comparabilidad. Chromium con 24 PDF y seis citas abiertas. Cotejo de los 14 casos financieros con el cierre. | VERIFIED localmente. [Bitácora](../execution/EXECUTION_LOG.md) |
+
+## Auditoría previa a la prueba real
+
+| Criterio vigente | Evidencia posterior al simulacro | Resultado |
+|---|---|---|
+| SPEC-001-AC-01/03/06, PRD RF-10 y T-09/T-13 | D01–D03 con definiciones, listas bajo encabezado y ausencia de evidencia futura. Cotejo de elementos y del folio impreso en la página física. | VERIFIED localmente. |
+| SPEC-002-AC-02/03/05 y T-05/T-06/T-07/T-08 | F01–F03 con cruce fila/columna y moneda, advertencia original de Bineo y aclaración. Reejecutados los 14 casos de robustez. | VERIFIED localmente. |
+| SPEC-002-AC-06 | Comprobación sintética desde FastAPI propuesta para el preflight real. | NOT RUN. |
+
+[Informe y reproducción](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md) · [Propuesta RCTF](PROPUESTA_RCTF_PRUEBA_REAL.md)
