@@ -15,3 +15,14 @@
 | PRD AC-25/AC-26, T-16 | Descubrir corpus variable y deduplicar por contenido | Ingesta con dos conjuntos de prueba | NOT RUN |
 
 Al aprobar una spec, añadir su identificador y plan a las filas correspondientes. Conservar referencia a la ejecución real y al cambio verificado.
+
+## Siguiente corte · SPEC-002 v1
+
+| Requisito | Criterio | Prueba prevista | Estado |
+|---|---|---|---|
+| PRD AC-19 y AC-21 | SPEC-002-AC-01 | T-10/T-11, ciclo con doble local | NOT RUN |
+| PRD AC-07/09/16/18 | SPEC-002-AC-02 | T-05/T-06 y apertura dirigida de ambas citas | NOT RUN |
+| PRD AC-11 a AC-15 | SPEC-002-AC-03 | T-07/T-08, comparación Decimal y abstenciones | NOT RUN |
+| PRD AC-02/03/08/10/25–27 | SPEC-002-AC-04 | T-02/T-13/T-14/T-16, dos corpus y ampliación gradual | NOT RUN |
+| PRD AC-16/18/19 | SPEC-002-AC-05 | T-09 si cambian interfaz o código compartido con P0 | NOT RUN |
+| PRD AC-19 y AC-21 | SPEC-002-AC-06 | T-10, ciclo sintético con proveedor real autorizado | NOT RUN, autorización independiente pendiente |

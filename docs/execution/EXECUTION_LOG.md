@@ -58,3 +58,15 @@ Se probaron las superficies del plan con Python 3.12, SQLite FTS5, React 19, Vit
 | P0-04 | Consulta real «¿Qué es el riesgo de crédito?» en navegador a 375 px | Respuesta extractiva sobre incumplimiento de obligaciones de pago; la cita abrió la página 7 del mismo documento. Se cotejó el texto con pdftotext ejecutado sobre esa página del original y se comprobó la decodificación del PNG. |
 
 Los límites del primer corte y el procedimiento de reproducción están en el [README](../../README.md).
+
+## 2026-11-19 · Reanudación y propuesta de SPEC-002
+
+Responsable: Codex. `git status --short --branch` mostró main limpio al reanudar. HEAD y origin/main coincidían en `4620231`. [Spec quality en main](https://github.com/mfhalejandro/P2Banorte/actions/runs/44600670150) pasó en ese SHA. Los verificadores de integridad y especificación pasaron. El preflight de escritura se ejecutó con el aislamiento de los originales intacto.
+
+La aprobación previa cubre PRD V3, SPEC-001 y publicación de CI/P0. La sesión carece de configuración de inferencia del backend. No se ejecutaron llamadas externas de inferencia. Se propone [SPEC-002 v1](../../specs/SPEC-002-comparacion-financiera.md) en IN_REVIEW y se añaden sus criterios a la trazabilidad. La implementación del corte y sus pruebas quedan en NOT RUN. Se conserva la evidencia previa del P0.
+
+### 2026-11-19 · Preparación local de la revisión funcional
+
+El solicitante autorizó preparación técnica local y pruebas sintéticas con doble. SPEC-002 v1 sigue en IN_REVIEW. Se detallaron procedencia, lectura de tablas, comparabilidad, fórmulas y abstención, y se separó la aceptación con doble del ciclo real sujeto a autorización. Los criterios del nuevo corte permanecen en NOT RUN.
+
+La comprobación preparatoria con PyMuPDF generó y reabrió dos PDF ficticios con encabezados trimestrales y acumulados y una cifra repetida en una celda señuelo. Validó la extracción de la matriz y los oráculos Decimal de diferencia de 12.29 millones MXN, variación de 11.06 % y diferencia de tasas de 1.5 puntos porcentuales. El archivo de ensayo y los PDF quedaron en un directorio temporal. Las tres pruebas sintéticas de línea base del doble P0 pasaron con `.venv/bin/python -B -m pytest -p no:cacheprovider -q tests/p0/test_slice.py -k provider_limits` (exit 0, 4.02 s). Cubren referencia inventada, proveedor caído, tiempo y presupuesto de herramientas del P0. No hubo llamadas a servicios externos.
