@@ -54,3 +54,7 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | SPEC-002-AC-06 | Comprobación sintética desde FastAPI propuesta para el preflight real. | NOT RUN. |
 
 [Informe y reproducción](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md) · [Propuesta RCTF](PROPUESTA_RCTF_PRUEBA_REAL.md)
+
+| Seguimiento | Evidencia | Resultado |
+|---|---|---|
+| PRD RF-03/RF-10 y SPEC-001-AC-01/03/06 | D02a–D02d y D03a comprueban paráfrasis, orden de instrucciones, contexto de la Tenedora, fuente y año. | VERIFIED localmente. |

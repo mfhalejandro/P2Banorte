@@ -61,16 +61,41 @@ def definition_topic(question):
     return " ".join(re.findall(r"[^\W_]+", re.sub(r"^\s*(?:la|el|las|los|una|un)\s+", "", tail, flags=re.I))[:18])
 
 
+SOURCE_FIELD = r"(?:(?:el|la|los|las|su|sus)\s+)?(?:documentos?|fuentes?|p[aá]ginas?)"
+SOURCE_FIELDS = rf"{SOURCE_FIELD}(?:\s+(?:y|e)\s+{SOURCE_FIELD}){{0,2}}"
+PER_ITEM = r"cada\s+(?:un[oa]|pol[ií]tica|elemento|punto)"
+SOURCE_VERB = r"(?:indica|señala|cita|incluye|especifica|identifica)"
+PRESENTATION_CLAUSE = re.compile(
+    rf"(?:{SOURCE_VERB}\s+(?:{SOURCE_FIELDS}(?:\s+(?:de|para)\s+{PER_ITEM})?"
+    rf"|en\s+qu[eé]\s+{SOURCE_FIELDS}\s+(?:se\s+encuentra|aparece)\s+{PER_ITEM})"
+    rf"|con\s+{SOURCE_FIELDS}(?:\s+(?:de|para)\s+{PER_ITEM})?"
+    r"|(?:enumera|lista)\s+(?:las\s+)?(?:pol[ií]ticas|medidas|referencias)\s+identificadas"
+    r"|enum[eé]ralas|l[ií]stalas"
+    r"|(?:responde|presenta(?:\s+la\s+respuesta)?|enumera)\s+en\s+(?:viñetas|una\s+lista|formato\s+de\s+lista))",
+    re.I,
+)
+CLAUSE_BOUNDARY = re.compile(rf"(?<=[.!?])\s+|[;\n]\s*|,\s+|\s+(?:y|e)\s+(?={SOURCE_VERB}\b)", re.I)
 EXPLANATION_PROMPT = re.compile(
-    r"^[¿\s]*(?:qu[eé]\s+(.+?)\s+se\s+(?:mencionan|describen|enumeran|indican)[?\s]*$"
-    r"|(?:describe|enumera|explica)\s+(.+?)[.!?\s]*$)", re.I,
+    r"^[¿\s]*(?:qu[eé]\s+(.+?)\s+se\s+(?:mencionan|describen|enumeran|indican|identifican)\b(.*)"
+    r"|(?:cu[aá]les\s+son|describe|enumera|explica)\s+(.+))$", re.I,
 )
 LIST_MARK = re.compile(r"^([•●▪–·])(?:\s+|$)")
 
 
+def documentary_query(question):
+    """Eliminar solo cláusulas completas de presentación. Conservar cualquier restricción."""
+    return " ".join(
+        clause for clause in CLAUSE_BOUNDARY.split(question.strip())
+        if clause and not PRESENTATION_CLAUSE.fullmatch(clause.strip(" ¿¡?!."))
+    )
+
+
 def explanation_terms(question):
+    """Tema, entidad y restricciones presentes en la consulta documental normalizada."""
     prompt = EXPLANATION_PROMPT.match(question)
-    return set(terms(prompt[1] or prompt[2])) if prompt else set()
+    if prompt is None:
+        return set()
+    return set(terms(prompt[3] or f"{prompt[1]} {prompt[2]}"))
 
 
 def page_lines(page):
@@ -267,10 +292,13 @@ class Corpus:
             """)]
 
     def search_corpus(self, request: SearchRequest):
-        tokens = terms(request.query)[:18]
+        query = documentary_query(request.query)
+        topic = definition_topic(query)
+        explain = explanation_terms(query) if not topic else set()
+        query_terms = [token for token in terms(query) if not explain or token in explain]
+        tokens = query_terms[:18]
         if not tokens:
             return []
-        topic = definition_topic(request.query)
         expressions = []
         if topic:
             cues = ("se refiere a", "se define como", "consiste en", "es la posibilidad", "es la probabilidad", "pérdida potencial")
@@ -287,9 +315,8 @@ class Corpus:
             ]
         # Rechazar coincidencias débiles antes de presentarlas como evidencia.
         required = math.ceil(len(tokens) * 0.8)
-        required_numbers = {t for t in tokens if any(c.isdigit() for c in t)}
+        required_numbers = {t for t in query_terms if any(c.isdigit() for c in t)}
         matches = []
-        explain = not topic and explanation_terms(request.query)
         for row in rows:
             common = set(tokens).intersection(terms(row["body"]))
             if len(common) >= required and required_numbers <= common:

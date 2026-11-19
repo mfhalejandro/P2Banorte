@@ -22,6 +22,18 @@ QUESTIONS = {
             "¿Cuál fue la variación y existe alguna advertencia que afecte la comparabilidad?"),
     "F03": "Calcula la variación porcentual de la utilidad neta de GFNorte.",
 }
+PARAPHRASES = {
+    "D02a": ("¿Cuáles son las políticas de riesgo de liquidez de la Tenedora? "
+             "Enumera las políticas identificadas y señala en qué documento y página se encuentra cada una."),
+    "D02b": ("Señala en qué documento y página se encuentra cada una. "
+             "¿Cuáles son las políticas de riesgo de liquidez de la Tenedora?"),
+    "D02c": ("Con documento y página para cada política, "
+             "enumera las políticas de riesgo de liquidez de la Tenedora."),
+    "D02d": ("Enumera las políticas de riesgo de liquidez de la Tenedora "
+             "e indica el documento y la página de cada una."),
+    "D03a": ("Cita la fuente y la página. "
+             "¿Qué políticas de riesgo de liquidez de la Tenedora se mencionan en el año 2035?"),
+}
 POLICY_HEADING = "Las políticas de Riesgo de Liquidez en la Tenedora contemplan:"
 POLICIES = (
     "El establecimiento de Límites Globales y Específicos de Administración de Riesgo de Balance y Liquidez.",
@@ -111,7 +123,7 @@ def inspect_citation(root, case, citation):
 
 
 def assess(root, row):
-    case = row["id"]
+    case = row["id"][:3]
     evidence = [inspect_citation(root, case, cite) for cite in row["citations"]]
     supported = all(all(item[key] for key in ("accesible", "textual", "semántica")) for item in evidence)
     status, answer, tools = (row[key] for key in ("status", "answer", "tools_used"))
@@ -176,17 +188,19 @@ def main():
     cli.add_argument("--data", type=Path, required=True)
     cli.add_argument("--base", default="http://127.0.0.1:5194")
     cli.add_argument("--recorded", type=Path)
+    cli.add_argument("--paraphrases", action="store_true", help="Incluye cuatro variantes de D02 y una de D03")
     args = cli.parse_args()
+    questions = {**QUESTIONS, **PARAPHRASES} if args.paraphrases else QUESTIONS
     root = args.data.resolve(strict=True)
     endpoint = urlparse(args.base)
     if endpoint.scheme != "http" or not ip_address(endpoint.hostname or "").is_loopback or endpoint.path or endpoint.username:
         cli.error("La evaluación admite únicamente el servicio HTTP local de loopback.")
     if args.recorded:
         rows = [json.loads(line) for line in args.recorded.read_text().splitlines()]
-        if [(row["id"], row["question"]) for row in rows] != list(QUESTIONS.items()):
-            cli.error("La captura no coincide con las seis preguntas exactas.")
+        if [(row["id"], row["question"]) for row in rows] != list(questions.items()):
+            cli.error("La captura no coincide con las preguntas de la evaluación.")
     else:
-        rows = (live(args.base, case, question) for case, question in QUESTIONS.items())
+        rows = (live(args.base, case, question) for case, question in questions.items())
     passed = True
     for row in rows:
         result = assess(root, row)

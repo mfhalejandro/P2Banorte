@@ -135,6 +135,47 @@ def test_explanatory_answers_use_bounded_lists_with_local_context(corpus):
     assert future["status"] == "abstained" and future["citations"] == []
 
 
+def test_documentary_paraphrases_preserve_topic_entity_and_constraints(corpus):
+    for name, heading, policy in (
+        ("Tenedora.pdf", "Políticas de riesgo de liquidez de la Tenedora:", "Establecimiento de límites de liquidez."),
+        ("Banco.pdf", "Políticas de riesgo de liquidez del banco:", "Revisar la política del banco."),
+        ("Tenedora ampliado.pdf", "Políticas de riesgo de liquidez de la Tenedora vigentes:",
+         "El establecimiento de límites de liquidez."),
+    ):
+        with pymupdf.open() as document:
+            page = document.new_page()
+            page.insert_text((35, 100), heading)
+            page.insert_text((50, 122), "• " + policy)
+            document.save(corpus.data / name)
+    corpus.index()
+
+    topic = "las políticas de riesgo de liquidez de la Tenedora"
+    asks = (
+        f"¿Cuáles son {topic}? Enumera las políticas identificadas y señala en qué documento y página se encuentra cada una.",
+        f"Señala en qué documento y página se encuentra cada una. ¿Cuáles son {topic}?",
+        f"Con documento y página para cada política, enumera {topic}.",
+        f"Enumera {topic} e indica el documento y la página de cada una.",
+        f"Responde en viñetas; ¿Cuáles son {topic}? Enuméralas.",
+    )
+    with TestClient(create_app(corpus)) as api:
+        for query in asks:
+            result = api.post("/api/chat", json={"message": query}).json()
+            assert result["status"] == "answered" and result["provider_mode"] == "extractivo local"
+            citation, = result["citations"]
+            assert citation["filename"] in {"Tenedora.pdf", "Tenedora ampliado.pdf"} and citation["pdf_page"] == 1
+            assert "establecimiento de límites de liquidez." in result["answer"].casefold()
+            assert "Revisar la política del banco." not in result["answer"]
+
+        for query in (
+            f"Cita la fuente y la página. ¿Qué {topic.removeprefix('las ')} se mencionan en el año 2035?",
+            f"¿Cuáles son {topic}? Cita el documento y la página 152.",
+            f"¿Cuáles son {topic} en dólares? Cita la fuente y la página.",
+            "Enumera las políticas identificadas y señala en qué documento y página se encuentra cada una.",
+        ):
+            result = api.post("/api/chat", json={"message": query}).json()
+            assert result["status"] == "abstained" and result["citations"] == []
+
+
 def test_changed_and_escaped_original(corpus, tmp_path):
     old = corpus.catalog()[0]["doc_id"]
     write_pdf(tmp_path / "nuevo.pdf", ["Página distinta."])

@@ -60,6 +60,14 @@
 
 **Aceptación:** una definición, una explicación con varios elementos, una consulta sin respaldo, dos comparaciones con resultados de distinta clase y una aclaración financiera. Cada afirmación tiene respaldo localizado o se declara la abstención. Se rechaza el caso si una cifra corresponde a otra fila, un pie se incorpora a la respuesta o falta contexto para una cita. **Impacto:** preparar oráculos en T+45 a T+100 y dedicar hasta 20 minutos a cotejo en T+140 a T+165.
 
+### Hallazgo posterior · Robustez lingüística de la consulta documental
+
+**Aplica a** PRD RF-03, RF-10 y §9, y TASK T-09/T-13. La pregunta corta de liquidez recuperaba tres políticas. Su paráfrasis con entidad explícita y un pedido de documento y página se abstenía porque la búsqueda exigía palabras de presentación.
+
+> Separa el tema y la entidad de las restricciones de contenido y de las instrucciones sobre cómo presentar la respuesta. Descarta de la recuperación únicamente instrucciones de presentación reconocibles, como indicar el documento y la página de cada elemento. Conserva los periodos, entidades, monedas y demás condiciones que limitan el contenido. Las paráfrasis equivalentes, con las instrucciones antes, después o coordinadas con la pregunta, deben conservar las afirmaciones respaldadas y las citas que las demuestran. Si una restricción carece de respaldo, declara la limitación o abstente. No reduzcas los controles de evidencia para aprobar una paráfrasis.
+
+**Aceptación.** Probar una pregunta breve y al menos tres formulaciones equivalentes que cambien el orden de las instrucciones. Cotejar los mismos elementos, la entidad y la página física. Repetir una variante con un periodo inexistente y comprobar que se abstiene. Verificar también que los casos financieros de moneda y comparabilidad conservan sus resultados. **Impacto.** Incluye 5 minutos del bloque de aceptación T+140–165, dentro del tiempo ya reservado para la muestra.
+
 ## Plan operativo de 180 minutos
 
 La reutilización de código e índice depende de las reglas de Coder y de si el estado corresponde a los archivos autorizados. El catálogo real constituye una entrega distinta del ensayo.

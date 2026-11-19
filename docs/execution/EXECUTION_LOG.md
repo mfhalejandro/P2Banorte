@@ -139,3 +139,11 @@ Codex reanudó en 7f37024 con HEAD y origin/main alineados, árbol e índice Git
 Se capturaron las seis respuestas antes de aplicar cambios. D02 y F02 quedaron PARTIAL y F01 FAIL. Tras corregir extracción, alcance, unidad y evidencia de perímetro, el ejecutor de aceptación local y Chromium pasaron los seis casos. Se verificaron 6/6 citas accesibles, 6/6 textuales y 6/6 semánticas de esa muestra. La regresión Python pasó 48 pruebas y 5 subcasos. El smoke aislado pasó 6 pruebas. El ejecutor de robustez reprodujo 14/14 y 25/25 PNG. R11 conserva la abstención con el párrafo de la advertencia.
 
 La evidencia de hoy es posterior al cierre de las 15:25. Se conservan la arquitectura V3 y las métricas históricas. El propietario debe revisar la propuesta RCTF y la decisión sobre inferencia. SPEC-002-AC-06 sigue NOT RUN. [Informe, comandos y oráculos](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md) · [Propuesta y plan](../quality/PROPUESTA_RCTF_PRUEBA_REAL.md)
+
+## 2026-11-19 16:20 CDMX · Paráfrasis e instrucciones de presentación
+
+Codex reanudó en 68d2783 con HEAD y origin/main alineados y los cambios locales e índice Git limpios. Los originales pasaron integridad y aislamiento. La consulta extensa de D02 se abstuvo antes de leer fuentes por un umbral de 8/10 términos que incluía formato.
+
+Se normalizaron las cláusulas documentales de presentación, se preservó el umbral del 80 % y se conservaron los controles de tema, entidad, restricciones numéricas y encabezado. Se deduplicaron las viñetas idénticas de fuentes repetidas. La consulta larga y otras tres formulaciones mantienen las mismas tres políticas de la página física 152. La variante para 2035 se abstiene.
+
+Pasaron 11/11 casos de aceptación en el servicio y en Chromium, con 10/10 páginas abiertas y citas comprobadas semánticamente. Python pasó 49 pruebas y 5 subcasos. El smoke pasó 6 pruebas. Los 14 casos financieros conservaron respuestas, citas y herramientas de la última auditoría y 25/25 PNG. La propuesta RCTF incorpora un criterio lingüístico reproducible. SPEC-002-AC-06 sigue NOT RUN. [Auditoría](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md) · [Propuesta](../quality/PROPUESTA_RCTF_PRUEBA_REAL.md)
