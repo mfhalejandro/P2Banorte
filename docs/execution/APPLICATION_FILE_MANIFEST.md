@@ -23,5 +23,15 @@ El control lee los patrones de la primera columna de esta tabla. Son rutas relat
 | `docs/plans/*.md` | Acceso documental a planes | Proyecto, revisión de contenido | Revisar entrega |
 | `docs/sprints/*.md` | Programación por sprint | Proyecto, revisión de contenido | Revisar entrega |
 | `.github/workflows/spec-quality.yml` | Validación de specs, permiso de lectura | Proyecto, revisión de contenido | Revisar entrega |
+| `README.md` | Arranque, límites y reproducción del P0 | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
+| `pyproject.toml` | Dependencias Python del P0 | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
+| `uv.lock` | Versiones y hashes de las distribuciones Python | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
+| `apps/api/*.py` | Ingesta, agente y API locales | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
+| `apps/web/*.json` | Metadatos, compilación y lock de dependencias web | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
+| `apps/web/*.ts` | Configuración y pruebas TypeScript | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
+| `apps/web/src/*.tsx` | Interfaz de chat y visor | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
+| `apps/web/src/*.css` | Estilos de la interfaz | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
+| `apps/web/index.html` | Entrada del cliente web | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
+| `tests/p0/*.py` | Pruebas y generador de PDF ficticios | Proyecto P0, código o metadatos revisables | Entrega autorizada en main |
 
-Cuando se active la aplicación, incorporar rutas de código, pruebas y documentación aprobadas. Mantener fuera de entrega los secretos, bases, corpus operativo, archivos comprimidos y PDF reales sin permiso específico.
+Revisar rutas adicionales al ampliar la aplicación. Mantener fuera de entrega los secretos, bases, corpus operativo, archivos comprimidos y PDF reales sin permiso específico.

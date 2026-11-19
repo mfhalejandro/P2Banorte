@@ -1,8 +1,8 @@
 # Arquitectura del sistema
 
-**Versión 1 · 2026-11-19 · Síntesis técnica de Codex.** El arnés local existe. La arquitectura de aplicación que sigue es el objetivo V3 del [PRD](../requirements/PRD.md) y del [stack](../requirements/technology_stack.md), pendiente de aprobación funcional e implementación.
+**Versión 1 · 2026-11-19 · Síntesis técnica de Codex.** El arnés local existe. El primer recorrido de aplicación está implementado sobre la arquitectura V3 del [PRD](../requirements/PRD.md) y del [stack](../requirements/technology_stack.md), ratificada y congelada por el solicitante. El propietario aprobó el PRD y SPEC-001 v2. El [README](../../README.md) describe el recorrido operativo y el proveedor extractivo usado.
 
-| Capa de la aplicación prevista | Responsabilidad y límite |
+| Capa de aplicación V3 | Responsabilidad y límite |
 |---|---|
 | React/Vite | Capturar la pregunta, representar respuestas y abrir citas por documento y página. |
 | FastAPI y agente | Validar contratos y límites de herramientas. Acceder a inferencia únicamente mediante un proveedor autorizado. |

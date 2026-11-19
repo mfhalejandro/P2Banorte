@@ -1,48 +1,59 @@
 ---
 id: SPEC-001
-title: Abrir la página original citada
-version: 1
-status: DRAFT
+title: Consulta financiera P0 con evidencia y página original
+version: 2
+status: IMPLEMENTED
 owner: Solicitante humano
-reviewers: []
+reviewers: [Solicitante humano]
 created_at: '2026-11-19'
 updated_at: '2026-11-19'
-prd_requirements: [AC-16, AC-17, AC-18]
+prd_requirements: [AC-01, AC-03, AC-04, AC-05, AC-06, AC-10, AC-11, AC-16, AC-17, AC-18, AC-19, AC-20]
 adrs: []
 sdds: []
 dependencies: []
-implementation_plan: null
-sprint_tasks: []
+implementation_plan: plans/implementation-spec-001-p0.md
+sprint_tasks: [P0-01, P0-02, P0-03, P0-04]
 quality_gates: [SPEC_QUALITY_GATE]
 supersedes: null
 superseded_by: null
-approval: null
+approval:
+  by: Solicitante humano
+  date: '2026-11-19'
+  evidence: "Conversación del proyecto: «Autorizo las do desiciones.» en respuesta a la solicitud de aprobación del PRD V3 y SPEC-001 v2."
 ---
 
-# SPEC-001 · Abrir la página original citada
+# SPEC-001 · Consulta financiera con evidencia verificable
 
-**Borrador para revisión funcional.** El usuario de la consulta necesita comprobar una respuesta en el PDF local del que procede. El resultado observable es que la cita abre la página correcta o que la interfaz explica por qué carece de evidencia. Fuentes: [PRD](../docs/requirements/PRD.md), [interfaz](../docs/requirements/interface_design.md) y [arquitectura prevista](../docs/architecture/SYSTEM_ARCHITECTURE.md).
+**Versión 2, aprobada por el propietario.** Un analista pregunta por un dato en un PDF local y puede comprobar la respuesta abriendo la página que la respalda. El recorrido P0 se demuestra con 1–2 PDF del directorio autorizado y una pregunta cuya respuesta se haya verificado contra el original. Fuentes: [PRD V3](../docs/requirements/PRD.md), [interfaz](../docs/requirements/interface_design.md) y [arquitectura](../docs/architecture/SYSTEM_ARCHITECTURE.md).
 
-## Alcance y actores
+## Recorrido y contratos
 
-El usuario consulta documentos disponibles en el catálogo autorizado. El backend resuelve la evidencia y la UI presenta la página. Se cubre la apertura de una cita y los fallos de referencia. El benchmarking global de recuperación, la calculadora, el despliegue cloud y la gestión de usuarios pertenecen a otros cambios.
+1. PyMuPDF lee los originales en solo lectura. SQLite persiste texto y fragmentos por documento y página en un directorio de estado separado. El identificador deriva del contenido y la búsqueda usa FTS5 y BM25 ascendente.
+2. Un agente acotado usa `search_corpus` y `read_source` con contratos Pydantic. Verifica que cada cita corresponde a evidencia leída. Con evidencia insuficiente se abstiene. La inferencia real requiere un proveedor de backend autorizado.
+3. FastAPI expone salud, `POST /api/chat` con `message` y respuesta JSON con `answer`, `citations`, `warnings`, `tools_used` y `request_id`. Cada cita incluye `doc_id`, `filename`, `pdf_page`, `evidence_id` y `snippet`. La página pública empieza en 1. Solo el adaptador PyMuPDF convierte al índice desde 0.
+4. En React/Vite/TypeScript, el clic en una cita abre la imagen original mediante `GET /api/documents/{doc_id}/pages/{pdf_page}/image`. Al cerrar el visor se conserva la conversación y el foco vuelve a la cita.
 
-## Flujo, interfaces y errores
+## Límites operativos
 
-La respuesta contiene el identificador del documento y su número de página PDF desde 1. Al activar una cita, la UI solicita la imagen de ese par al backend y muestra documento y página. La conversión al índice interno del parser ocurre al leer el PDF. Un ID desconocido o una página fuera de rango da un error 4xx sin rutas locales. Una respuesta sin respaldo explica la limitación y carece de citas inventadas. Eventos de streaming y cambios de esquema persistente: N/A para este contrato de vista.
+El usuario consulta documentos autorizados por ID. Se limitan llamadas, tiempo del agente y resolución de imagen. Una herramienta o un proveedor fallido se presenta como error recuperable. Un doble de proveedor permite probar el contrato, con identificación explícita del modo en la evidencia. El contenido de un PDF se trata como datos. Los logs omiten credenciales, texto sensible y razonamiento privado. En Coder se usa el corpus presente en `~/data`, sin descargas. Presupuesto de referencia: 2 CPU y 4 GB de RAM.
 
-## Controles y operación
-
-El backend valida el catálogo, el rango y los límites de render. El visor lee el corpus autorizado. La respuesta pública excluye razonamiento privado y el registro técnico puede identificar la clase de error sin exponer secretos. No se supone autorización para enviar documentos a un proveedor. La evaluación cotejará la página mostrada contra una página conocida, distinguible visualmente de las contiguas. Disponibilidad y latencia se medirán en el entorno del reto antes de fijar umbrales. Migración y rollback de datos: N/A para este borrador de una superficie nueva. Si la comprobación falla, se detiene la entrega del cambio.
+El primer corte entrega chat, evidencia, visor, README reproducible y diagrama lógico inicial. Tablas bajo demanda, cálculos Decimal, advertencias de comparabilidad y cobertura ampliada conservan su lugar en V3. Embeddings y demás ampliaciones condicionales se evaluarán en su fase. La base SQLite P0 es un derivado reconstruible. La recuperación de un fallo usa un estado de ensayo separado, preservando los originales.
 
 ## Criterios de aceptación
 
-| Criterio | Entrada y precondición | Resultado esperado | Prueba prevista |
-|---|---|---|---|
-| SPEC-001-AC-01 | Respuesta con una cita a la página 2 de un PDF con tres páginas distintas | Al activar la cita se muestra la segunda página del mismo documento | AC-16, T-09, comparación con original |
-| SPEC-001-AC-02 | ID desconocido o página posterior a la última | El backend devuelve 4xx sin ruta local y la interfaz muestra un error recuperable | AC-17, T-09, API y UI |
-| SPEC-001-AC-03 | Pregunta sin evidencia en el corpus del ensayo | La respuesta comunica insuficiencia y no ofrece referencia inventada | AC-18, evaluación con consulta fuera del corpus |
+| Criterio | Entrada y comprobación observable | Prueba |
+|---|---|---|
+| SPEC-001-AC-01 | Una cita a la página 2 de un PDF con tres páginas distinguibles abre la segunda página del mismo documento. El visor funciona a 375 px. | AC-16/20, T-09/T-12, comprobación visual contra el original |
+| SPEC-001-AC-02 | ID desconocido o página fuera de rango devuelve 4xx sin rutas locales. La UI permite cerrar el error o reintentar. | AC-17, T-09 |
+| SPEC-001-AC-03 | Una consulta sin respaldo produce abstención. Una referencia inventada del proveedor se descarta y no llega al visor. | AC-11/18, T-08 y evaluación fuera del corpus |
+| SPEC-001-AC-04 | Una segunda ingesta de los mismos PDF conserva el conteo de documentos/fragmentos y los SHA-256 de los originales. | AC-01/03/10, T-01/T-02 |
+| SPEC-001-AC-05 | La consulta recupera un fragmento conocido aun con acentos. Símbolos financieros no rompen MATCH y el ranking BM25 sigue orden ascendente. | AC-04/05/06, T-03/T-04 |
+| SPEC-001-AC-06 | De una pregunta en el chat se obtiene una respuesta respaldada por evidencia leída con herramientas reales. Se identifica el modo de proveedor. Si cae o agota su presupuesto, el proceso termina y la UI informa el fallo. | AC-19, T-09/T-10, smoke de extremo a extremo y caso de fallo |
 
-## Decisiones y evidencia
+## Historial y revisión
 
-2026-11-19 · Codex redactó v1 en DRAFT al materializar el gobierno de specs. La revisión del PRD, la aprobación de este alcance y la asignación de responsables de pruebas están pendientes. Las pruebas de aplicación figuran en NOT RUN en la [matriz de trazabilidad](../docs/quality/TRACEABILITY_MATRIX.md).
+2026-11-19 · Codex registró v1 como DRAFT con los tres criterios del visor. La v2 conserva sus identificadores y abarca el recorrido completo solicitado. El propietario confirmó la arquitectura V3 y pidió presentar el PRD y esta spec antes de implementar. Aprobación funcional pendiente; pruebas de aplicación en NOT RUN. [Trazabilidad](../docs/quality/TRACEABILITY_MATRIX.md)
+
+2026-11-19 · IN_REVIEW → APPROVED. El solicitante aprobó funcionalmente el PRD V3 y SPEC-001 v2 en la conversación del proyecto. La posterior autorización de publicar en main incluye únicamente CI y el código P0 verificado, sin originales RCTF.
+
+2026-11-19 · APPROVED → IN_PROGRESS → IMPLEMENTED. Codex ejecutó P0-01 a P0-04. Los seis criterios cuentan con evidencia técnica en la [bitácora](../docs/execution/EXECUTION_LOG.md), incluido cotejo independiente de una página real.

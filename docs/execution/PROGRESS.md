@@ -1,9 +1,5 @@
 # Estado del proyecto
 
-**Etapa activa: arnés de ingeniería.** El solicitante confirmó el 2026-11-19 el alcance de base operativa, la portabilidad Markdown y la huella de la entrega RCTF. El [registro de ejecución](EXECUTION_LOG.md) conserva las comprobaciones y su resultado.
+**P0 · aplicación V3.** El solicitante aprobó el PRD de la entrega confirmada y [SPEC-001 v2](../../specs/SPEC-001-cita-pdf.md). El primer corte integra lectura de PDF, FTS5/BM25, agente extractivo local, FastAPI, chat y visor de originales. Las instrucciones reproducibles están en el [README](../../README.md).
 
-**Siguiente etapa: aplicación P0.** El PRD se presenta para revisión. Falta la decisión funcional del propietario. Revisar el [borrador SPEC-001](../../specs/SPEC-001-cita-pdf.md) y, una vez aprobado, preparar el plan del recorrido con 1–2 PDF locales, búsqueda, respuesta respaldada y apertura de la página original desde una cita. Usar el presupuesto de 2 CPU y 4 GB y distinguir recuperación verificada de inferencia real.
-
-**Revisión Git.** En la revisión local de 2026-11-19, HEAD era `816e4ba`. El ZIP del hallazgo inicial ya no figura en el índice y el control automático pasó. La decisión sobre incorporación humana de los requisitos y derechos de PDF sigue sujeta a la política de publicación.
-
-**Gobierno documental.** Están disponibles los índices de ADR, specs y SDD junto al plan y al registro de sprints. El SDD-001 documenta los controles existentes del arnés. SPEC-001 está en DRAFT y el sprint de aplicación está pendiente de programación.
+El registro de [tareas](SPRINTS.md) y la [bitácora](EXECUTION_LOG.md) identifican las pruebas realizadas. La autorización de entrega cubre CI y el P0 verificado en `main`. Las fuentes RCTF siguen en el entorno protegido. El modo con proveedor generativo externo requiere autorización de destino y un contrato de inferencia disponible.

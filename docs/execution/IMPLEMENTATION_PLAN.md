@@ -1,6 +1,6 @@
 # Plan de implementación
 
-**2026-11-19 · Responsable del registro: Codex.** El trabajo actual corresponde al arnés. El [estado del proyecto](PROGRESS.md) y la [bitácora](EXECUTION_LOG.md) registran su ejecución.
+**2026-11-19 · Responsable del registro: Codex.** Etapa activa: primer vertical slice de aplicación. El [plan de SPEC-001 v2](../../plans/implementation-spec-001-p0.md) se activó con la aprobación funcional del solicitante. El [estado del proyecto](PROGRESS.md) y la [bitácora](EXECUTION_LOG.md) registran su ejecución.
 
 | Orden | Resultado | Condición para avanzar |
 |---|---|---|
