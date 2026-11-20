@@ -1,43 +1,88 @@
 import os
-from contextlib import asynccontextmanager
+import sqlite3
+from contextlib import AsyncExitStack, asynccontextmanager
+from tempfile import TemporaryDirectory
 from typing import Annotated
 
+import httpx
 from fastapi import FastAPI, HTTPException, Path, Query, Response
 
 from .agent import Agent, ChatRequest, ChatResponse, LocalExtractive, ProviderUnavailable
 from .corpus import Corpus
+from .deepseek_agent import DataNotAuthorized, DeepSeekAgent
+from .deepseek_config import SpendLedger, runtime_env, settings_from_env
+from .deepseek_fixture import synthetic_corpus
+from .deepseek_wire import DeepSeekHTTP
 from .financial_agent import FinancialAgent, requires_financial_tools
 
 
-def create_app(corpus=None, provider=None, financial_provider=None):
+def create_app(corpus=None, provider=None, financial_provider=None, *, deepseek_transport=None):
     @asynccontextmanager
     async def lifespan(app):
-        app.state.corpus = corpus or Corpus.configured()
-        mode = os.getenv("LLM_PROVIDER", "extractive")
-        app.state.documentary_agent = Agent(app.state.corpus, provider or LocalExtractive())
-        app.state.financial_enabled = financial_provider is not None or (provider is None and mode == "financial-local")
-        app.state.agent = (
-            FinancialAgent(app.state.corpus, provider=financial_provider)
-            if app.state.financial_enabled else app.state.documentary_agent
-        )
-        app.state.provider_available = (
-            provider is not None or financial_provider is not None or mode in {"extractive", "financial-local"}
-        )
-        yield
+        injected = provider is not None or financial_provider is not None
+        env = {} if injected else runtime_env()
+        mode = env.get("LLM_PROVIDER", os.getenv("LLM_PROVIDER", "extractive"))
+        async with AsyncExitStack() as stack:
+            if mode == "deepseek" and not injected:
+                settings = settings_from_env(env)
+                if settings.synthetic and settings.allow_real_data:
+                    raise ProviderUnavailable("Los modos sintético y de corpus real son excluyentes.")
+                if settings.synthetic:
+                    corpus_dir = stack.enter_context(TemporaryDirectory(prefix="p2-deepseek-fixture-"))
+                    app.state.corpus = synthetic_corpus(corpus_dir)
+                else:
+                    app.state.corpus = corpus or Corpus.configured()
+                adapter = None
+                if settings.api_key.get_secret_value() and (settings.synthetic or settings.allow_real_data):
+                    try:
+                        state_path = settings.budget_file.expanduser().resolve()
+                        if state_path.is_relative_to(app.state.corpus.db.parent.resolve()):
+                            raise ProviderUnavailable("El presupuesto debe estar separado del índice.")
+                        meter = SpendLedger(settings.budget_file, settings.budget_usd)
+                    except (OSError, sqlite3.Error, ProviderUnavailable):
+                        meter = None
+                    if meter:
+                        client = await stack.enter_async_context(httpx.AsyncClient(
+                            trust_env=False, follow_redirects=False, transport=deepseek_transport,
+                        ))
+                        adapter = DeepSeekHTTP(settings, meter, client)
+                app.state.agent = DeepSeekAgent(app.state.corpus, adapter, settings, synthetic=settings.synthetic)
+                app.state.financial_enabled = False
+                app.state.deepseek_enabled = True
+                app.state.deepseek_ready = adapter is not None
+                app.state.external_data_scope = (
+                    "synthetic" if settings.synthetic else "authorized" if settings.allow_real_data else "blocked"
+                )
+                app.state.provider_available = True  # El agente comunica credencial o política no disponible.
+            else:
+                app.state.corpus = corpus or Corpus.configured()
+                app.state.documentary_agent = Agent(app.state.corpus, provider or LocalExtractive())
+                app.state.financial_enabled = financial_provider is not None or (provider is None and mode == "financial-local")
+                app.state.agent = (
+                    FinancialAgent(app.state.corpus, provider=financial_provider)
+                    if app.state.financial_enabled else app.state.documentary_agent
+                )
+                app.state.deepseek_enabled = False
+                app.state.provider_available = injected or mode in {"extractive", "financial-local"}
+            yield
 
     app = FastAPI(title="Consulta financiera documental", lifespan=lifespan)
 
     @app.get("/api/health")
     def health():
         docs = app.state.corpus.catalog()
-        return {"status": "ok", "documents": len(docs), "provider_mode": app.state.agent.provider.mode}
+        result = {"status": "ok", "documents": len(docs), "provider_mode": app.state.agent.provider.mode}
+        if app.state.deepseek_enabled:
+            result["external_data_scope"] = app.state.external_data_scope
+            result["external_provider_ready"] = app.state.deepseek_ready
+        return result
 
     @app.get("/api/documents")
     def catalog():
         return app.state.corpus.catalog()
 
     @app.post("/api/chat", response_model=ChatResponse)
-    async def chat(body: ChatRequest):
+    async def chat(body: ChatRequest, response: Response):
         question = body.message.strip()
         if not question:
             raise HTTPException(422, "Escribe una pregunta.")
@@ -46,9 +91,20 @@ def create_app(corpus=None, provider=None, financial_provider=None):
         agent = app.state.agent
         if app.state.financial_enabled and not requires_financial_tools(question):
             agent = app.state.documentary_agent
+        metrics = {}
         try:
+            if app.state.deepseek_enabled:
+                result = await agent.answer(question, metrics=metrics)
+                response.headers.update(metrics)
+                return result
             return await agent.answer(question)
-        except (TimeoutError, ProviderUnavailable, ConnectionError, OSError) as exc:
+        except DataNotAuthorized:
+            raise HTTPException(403, "El envío a DeepSeek no está autorizado para esta consulta.") from None
+        except ProviderUnavailable as exc:
+            if app.state.deepseek_enabled:
+                raise HTTPException(503, str(exc), headers=metrics) from None
+            raise HTTPException(503, "No se pudo completar la consulta. Vuelve a intentarlo.") from exc
+        except (TimeoutError, ConnectionError, OSError) as exc:
             raise HTTPException(503, "No se pudo completar la consulta. Vuelve a intentarlo.") from exc
         except KeyError as exc:
             raise HTTPException(409, "El índice cambió. Repite la consulta.") from exc

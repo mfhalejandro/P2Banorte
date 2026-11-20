@@ -73,3 +73,13 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | SPEC-002-AC-06 | Proveedor real y entorno de evaluación. | NOT RUN. |
 
 [Resultados, causas, métricas y comandos](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#b01b10-y-generalización-independiente-sobre-a156744)
+
+### DeepSeek real con datos ficticios
+
+| Criterio | Evidencia posterior al simulacro | Estado |
+|---|---|---|
+| SPEC-002-AC-06 | FastAPI y deepseek-flash sin thinking. Intercambio real de herramientas, argumentos validados, dos operaciones respaldadas y 12 citas cotejadas en la ejecución final. | VERIFIED en corpus sintético. |
+| SPEC-001-AC-01/03/06 y SPEC-002-AC-01 a AC-05 | Se conservaron P0, Decimal, comparabilidad y visor. Instrucción en PDF sin ejecución, transportes inválidos y recuperación tras timeout. | VERIFIED en pruebas locales. |
+| Frontera de inferencia y corpus real | Chat bloqueado con la política desactivada, cero llamadas en la prueba simulada, modo sintético separado. Evaluadores G01–G22 y H01–H08 preparados. | Política VERIFIED. Evaluación real NOT RUN. |
+
+[Resultados y métricas](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#deepseek-real-sobre-un-corpus-sintético--a-partir-de-2fab9ef)

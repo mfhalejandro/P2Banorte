@@ -89,7 +89,7 @@ Con el frontend de desarrollo en marcha, prueba estas preguntas:
 - **Calcula la variación porcentual de la utilidad neta de Grupo Faro entre 3T24 y 3T25.** La variación es 11.06 %.
 - **Compara la utilidad neta de Grupo Faro entre 3T24 y 9M25.** El agente identifica la diferencia de duración o tipo y omite el cálculo.
 
-El corte busca etiquetas trimestrales como `3T25` y acumuladas como `9M25`. El primer periodo indicado es la base de cálculo. Prioriza tablas con rótulos verificables de indicador, periodo, entidad, consolidación y unidad. Ante encabezados ambiguos o evidencia insuficiente se abstiene. Para volver a P0, inicia con `LLM_PROVIDER=extractive` y sus rutas habituales. El ciclo con un proveedor generativo real (AC-06) queda pendiente de autorización independiente.
+El corte busca etiquetas trimestrales como `3T25` y acumuladas como `9M25`. El primer periodo indicado es la base de cálculo. Prioriza tablas con rótulos verificables de indicador, periodo, entidad, consolidación y unidad. Ante encabezados ambiguos o evidencia insuficiente se abstiene. Para volver a P0, inicia con `LLM_PROVIDER=extractive` y sus rutas habituales. La evidencia de AC-06 se registra por separado en el modo DeepSeek con datos ficticios.
 
 Pruebas dirigidas: `uv run --locked python -B -m pytest -q tests/financial tests/p0`.
 
@@ -113,3 +113,52 @@ curl -fsS http://127.0.0.1:8194/api/health
 ~~~
 
 Abre http://127.0.0.1:5194. Los dos servicios se pueden reiniciar por separado con `systemctl --user restart` seguido del nombre de la unidad. Para detener ambos, ejecuta `systemctl --user stop p2banorte-web.service p2banorte-api.service`. El arranque abre el índice existente directamente.
+
+## DeepSeek en una instancia sintética aislada
+
+FastAPI usa DeepSeek Flash con el contrato Chat Completions, cinco funciones V3 y thinking desactivado. El modelo selecciona identificadores temporales de bloques. El backend valida referencias y comparabilidad, ejecuta Decimal y compone el texto a partir de resultados observados. El visor PNG sigue siendo local y la herramienta de inspección comprueba el render. [API oficial](https://api-docs.deepseek.com/en/) · [Tool calling](https://api-docs.deepseek.com/guides/tool_calls/)
+
+Guarda la API key en la variable DEEPSEEK_API_KEY del archivo .env privado de la raíz. Aplica chmod 600 .env. El backend lo lee directamente al arrancar. P2BANORTE_ENV_FILE permite elegir otra ruta privada. Se admiten asignaciones simples y comillas completas, sin expansión. Las variables explícitas del proceso tienen prioridad. El archivo permanece ignorado por Git. Usa estos ajustes de prueba, además de tu credencial.
+
+~~~dotenv
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-flash
+LLM_PROVIDER=deepseek
+DEEPSEEK_ALLOW_REAL_DATA=false
+~~~
+
+Arranca en otro puerto para conservar la demo local. DEEPSEEK_SYNTHETIC genera un PDF y un índice temporales propios. Las preguntas de la suite están controladas por el backend. Cualquier otro texto se bloquea antes del transporte. Si se usa una instancia con el corpus normal y DEEPSEEK_ALLOW_REAL_DATA=false, se bloquea todo POST de chat DeepSeek. El visor y el catálogo pueden seguir disponibles localmente.
+
+~~~bash
+export LLM_PROVIDER=deepseek DEEPSEEK_SYNTHETIC=true DEEPSEEK_ALLOW_REAL_DATA=false
+.venv/bin/python -B -m uvicorn apps.api.main:app --host 127.0.0.1 --port 8196
+~~~
+
+El mismo arranque se puede ejecutar desde la raíz con systemd de usuario.
+
+~~~bash
+systemd-run --user --unit=p2banorte-deepseek-synthetic --collect \
+  --property="WorkingDirectory=$PWD" --property=CPUQuota=200% --property=MemoryMax=4G \
+  --setenv=LLM_PROVIDER=deepseek --setenv=DEEPSEEK_SYNTHETIC=true \
+  --setenv=DEEPSEEK_ALLOW_REAL_DATA=false --setenv="P2BANORTE_ENV_FILE=$PWD/.env" \
+  "$PWD/.venv/bin/python" -B -m uvicorn apps.api.main:app --host 127.0.0.1 --port 8196
+~~~
+
+El evaluador comprueba el ámbito sintético antes de enviar preguntas. Las cabeceras de respuesta contienen métricas saneadas para la medición. Detén la unidad con systemctl --user stop p2banorte-deepseek-synthetic.service. Para uso local explícito, LLM_PROVIDER=extractive conserva P0 y LLM_PROVIDER=financial-local usa el doble determinista y Decimal.
+
+~~~bash
+PYTHONPATH=.:tests/financial .venv/bin/python -B \
+  tests/financial/evaluate_deepseek.py synthetic --port 8196
+~~~
+
+| Ajuste | Valor predeterminado |
+|---|---|
+| DEEPSEEK_MAX_CALLS / MAX_ROUNDS / MAX_TOOLS | 6 envíos, 5 rondas y 12 herramientas por consulta |
+| DEEPSEEK_MAX_INPUT_TOKENS / MAX_OUTPUT_TOKENS | 12.000 de entrada por llamada como cota previa conservadora y 384 generados por llamada |
+| DEEPSEEK_CONCURRENCY | Una solicitud en vuelo por proceso |
+| DEEPSEEK_CALL_TIMEOUT / DEADLINE | 6 s por llamada y hasta 15 s para la solicitud completa |
+| DEEPSEEK_BUDGET_USD / BUDGET_FILE | USD 0,10 acumulados en el registro SQLite de presupuesto, fuera del índice del corpus. Ruta predeterminada ~/.local/state/p2banorte/deepseek-budget.sqlite3, o bajo XDG_STATE_HOME. |
+
+Los límites de pasos y coste se comparten entre los apartados. Cada llamada reserva el máximo estimado antes del envío y concilia registros con los tokens reportados. Un envío sin uso confirmado conserva su reserva. No hay reintentos implícitos ni cambio automático de proveedor. La estimación usa la tarifa máxima Flash sin descuento de caché. [Tarifas oficiales](https://api-docs.deepseek.com/quick_start/pricing/)
+
+Las suites independent y new del evaluador comparan local y DeepSeek y requieren autorización tanto en la instancia como en la invocación. La habilitación para corpus real requiere autorización expresa para ese corpus, preguntas, extractos y resultados de herramientas, con destino, finalidad, retención y presupuesto definidos. Mantener la bandera en false hasta obtenerla.

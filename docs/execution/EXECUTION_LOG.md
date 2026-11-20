@@ -151,3 +151,9 @@ Pasaron 11/11 casos de aceptación en el servicio y en Chromium, con 10/10 pági
 ## 2026-11-19 · Generalización lingüística P01–P08
 
 Reanudación en d747950 con HEAD y origin/main alineados y el índice Git limpio. Pasaron integridad RCTF y aislamiento. Se reutilizó el SQLite sin reingesta y se conservó su huella. Las ocho preguntas exactas pasaron en Chromium y se abrieron sus diez citas. La suite de 14 casos financieros volvió a pasar con 25 PNG. El negativo de entidad reveló que el flujo podía citar una nota de otro grupo al abstenerse. Se corrigió la atribución y el negativo ahora se abstiene por discrepancia de entidad sin citas. [Trazas y latencias](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#generalización-lingüística-p01p08-sobre-d747950)
+
+## Integración DeepSeek · a partir de 2fab9ef
+
+Codex verificó HEAD, origin/main, árbol limpio, originales, 24 PDF e índice confirmado. El entorno cargó .env con permisos 0600, excluido de Git. Se mantuvo la demo local y se levantó una unidad temporal en loopback con corpus generado por el backend. Se autorizó únicamente DeepSeek Flash con datos ficticios. La revisión automática rechazó la invocación que contenía la bandera de corpus real y no se ejecutó esa parte. El bloqueo se comprobó con transporte simulado y sin llamadas.
+
+FastAPI completó tres baterías reales con 10/10, 8/10 y 10/10. La ejecución final confirmó tool calling, Decimal, citas y control de instrucciones del PDF. Los dos cierres inválidos de la segunda batería motivaron una recuperación parcial conservadora cuando ya existen fuentes verificadas. Se emplearon 117 llamadas, 188.985 tokens de entrada y 8.751 de salida, con USD 0,0671967 estimados como cota. Se detuvo solo la unidad de pago. [Resultados, controles y comandos](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#deepseek-real-sobre-un-corpus-sintético--a-partir-de-2fab9ef)

@@ -19,3 +19,5 @@ Las instrucciones de instalación y ejecución se mantienen en el [README](../..
 **Robustez lingüística, VERIFIED en la muestra local.** Las cinco variantes de D02 y D03 pasaron junto con los seis casos originales. Se conservan las políticas y su cita al cambiar el orden de instrucciones, y la variante con 2035 sigue absteniéndose. [Evidencia y reproducción](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#seguimiento-de-robustez-lingüística-sobre-68d2783)
 
 **Intención operativa P01–P08, VERIFIED en la muestra.** Las ocho preguntas exactas pasaron en Chromium. Se conservaron las abstenciones por futuro, periodos incompatibles y saldo no aditivo. [Resultados y reproducción](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#generalización-lingüística-p01p08-sobre-d747950)
+
+**DeepSeek real sintético, VERIFIED.** FastAPI completó el ciclo de herramientas con deepseek-flash sin thinking y pasó 10/10 en la batería final. El uso sobre corpus real continúa NOT RUN y bloqueado por configuración. La demo de 24 PDF conserva financial-local. [Evidencia y límites](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#deepseek-real-sobre-un-corpus-sintético--a-partir-de-2fab9ef)

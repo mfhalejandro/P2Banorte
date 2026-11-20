@@ -266,10 +266,17 @@ def live(base, case, question):
     try:
         with urlopen(request, timeout=35) as resp:
             code, row = resp.status, json.load(resp)
+            headers = resp.headers
     except HTTPError as exc:
         code = exc.code
-        row = {"answer": "HTTP " + str(code), "status": None, "provider_mode": None, "tools_used": [], "citations": []}
+        headers = exc.headers
+        error = json.load(exc).get("detail") if exc.headers.get_content_type() == "application/json" else None
+        row = {"answer": error or "HTTP " + str(code), "status": None, "provider_mode": None, "tools_used": [], "citations": []}
     elapsed = round(perf_counter() - start, 3)
+    metrics = {key.lower().removeprefix("x-p2-deepseek-"): value for key, value in headers.items()
+               if key.lower().startswith("x-p2-deepseek-")}
+    if metrics:
+        row["consumo_deepseek"] = metrics
     for cite in row["citations"]:
         url = f'{base}/api/documents/{cite["doc_id"]}/pages/{cite["pdf_page"]}/image'
         try:

@@ -159,7 +159,7 @@ def inspect(root, cite):
         return {"access": access, "text": bool(text), "semantic": bool(semantic)}
 
 
-def assess(root, row, oracle):
+def assess(root, row, oracle, *, expected_mode=None):
     expected, phrases, sources = oracle
     checks = [inspect(root, cite) for cite in row["citations"]]
     matching = [cite for cite, check in zip(row["citations"], checks) if check["semantic"]]
@@ -169,7 +169,9 @@ def assess(root, row, oracle):
     facts = [phrase for phrase in phrases if contains(answer, phrase)]
     mode = "extractivo local" if (row["id"] in {"B01", "B02", "B03", "B10", "G01", "G02", "G03", "G04",
                                                 "G05", "G06", "G07", "G21"}) else "financiero local (doble)"
-    valid = row["http"] == 200 and row["provider_mode"] == mode and row["status"] == expected
+    if row["id"] in {"H01", "H02", "H08"}:
+        mode = "extractivo local"
+    valid = row["http"] == 200 and row["provider_mode"] == (expected_mode or mode) and row["status"] == expected
     cells = {tuple(part.strip() for part in cite["snippet"].split("|")[1:])
              for cite in matching if cite["snippet"].count("|") == 2}
     valid &= REQUIRED_CELLS.get(row["id"], set()) <= cells

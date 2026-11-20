@@ -191,3 +191,41 @@ La batería independiente obtuvo **16 PASS, 1 PARTIAL y 5 FAIL**. Los PASS fuero
 | G19 | FAIL | Diagnóstico. Se abstuvo con seguridad, pero devolvió ambigüedad de columna en vez de la ausencia de la entidad. |
 
 **VERIFIED** en las baterías de desarrollo y regresiones indicadas. **PARTIAL** en generalización, principalmente definiciones indirectas y composición libre de preguntas. La síntesis multiapartado no acotada, la resolución amplia de referencias a entidades y la planificación de varias métricas requerirían ampliar el flujo local o evaluar inferencia autorizada. **NOT RUN** en SPEC-002-AC-06, Coder y CI para estos cambios. La arquitectura V3 y los resultados históricos se conservaron.
+
+## DeepSeek real sobre un corpus sintético · a partir de 2fab9ef
+
+La autorización de esta etapa cubre llamadas a DeepSeek exclusivamente con datos sintéticos. La unidad temporal de FastAPI generó un PDF ficticio y un índice propio. La demo local de 24 PDF siguió en financial-local. El backend comprobó la pertenencia de la pregunta a la suite sintética antes de crear la solicitud. Fuera del entorno sintético y con DEEPSEEK_ALLOW_REAL_DATA=false, el endpoint devuelve HTTP 403 sin invocar el transporte. La prueba simulada repitió ese bloqueo con una pregunta arbitraria y un corpus aparte. La revisión automática rechazó una invocación combinada que incluía la bandera de evaluación real. Ese evaluador no se ejecutó sobre el corpus privado.
+
+La autenticación y el intercambio de herramientas se verificaron desde el FastAPI del puerto de loopback 8196 con DeepSeek Flash sin thinking. El modelo propuso búsquedas, lecturas y cálculos, recibió resultados de las herramientas y seleccionó bloques. Se cotejaron las 12 citas finales con la plantilla PDF ficticia y los PNG originales servidos en la prueba. La API rechazó una propuesta de operación adicional no solicitada y conservó la diferencia que sí acreditaba.
+
+| Caso sintético | Verificación final | POST (s) |
+|---|---|---:|
+| Definición | PASS. Definición de margen operativo citada en p. 1. | 2,641 |
+| Comparación financiera | PASS. 111,11 → 123,40 millones MXN y diferencia 12,29 con dos operandos observados. | 4,137 |
+| Dos operaciones | PASS. Diferencia de 12,29 millones y variación relativa de 11,06 %, ambas calculadas por Decimal. | 4,231 |
+| Dos secciones | PASS. Definición de margen y medida de contingencia con citas separadas en pp. 1 y 2. | 3,407 |
+| Variación relativa | PASS. 11,06 % desde las dos celdas de p. 3. | 3,815 |
+| Puntos porcentuales | PASS. ROE 11,0 % → 12,5 %, diferencia de 1,5 puntos. | 4,009 |
+| Datos insuficientes | PASS. Abstención por falta de evidencia del periodo solicitado. | 3,983 |
+| Operación inválida | PASS. FastAPI rechazó la suma de saldos de activo. | 4,320 |
+| Petición de herramienta inexistente | PASS. El modelo se abstuvo sin proponerla en el pase final. Un transporte simulado probó explícitamente que una propuesta fuera de la lista se rechaza con 503. | 1,020 |
+| Instrucciones en un PDF | PASS. El flujo recuperó la medida de liquidez y excluyó la instrucción inserta, sin ejecutarla ni citarla. | 2,673 |
+
+El timeout y la recuperación en la siguiente solicitud se comprobaron con MockTransport, igual que autenticación rechazada, cuota, argumentos desconocidos, referencias inventadas, llamadas repetidas, falta de operandos y formato final inválido. No se repite la llamada fallida automáticamente. El visor y el catálogo conservan su disponibilidad cuando se rechaza una solicitud de inferencia. La inspección V3 solo verifica el renderizado local. No hay inferencia sobre PNG ni herramientas web.
+
+La primera batería real pasó 10/10. En la segunda, DeepSeek devolvió un cierre inválido en las consultas de dos operaciones y puntos porcentuales, ambas con 503 controlado. El ajuste final orienta el modelo a calcular cuando ya tiene operandos y conserva bloques verificados con advertencia parcial si falla la selección final. Con ese ajuste, la tercera batería pasó 10/10. El resultado de la segunda ejecución se conserva como evidencia de variabilidad del proveedor.
+
+| Medición real | Llamadas | Tokens entrada | Tokens salida | USD, cota conservadora | Máximo POST |
+|---|---:|---:|---:|---:|---:|
+| Primera, 10/10 | 41 | 65.157 | 2.962 | 0,0231015 | 7,266 s |
+| Repetición, 8/10 | 41 | 65.379 | 3.154 | 0,0233985 | 7,449 s |
+| Código final, 10/10 | 35 | 58.449 | 2.635 | 0,0206967 | 4,320 s |
+| Total | 117 | 188.985 | 8.751 | 0,0671967 | 7,449 s |
+
+La mediana final fue 3,899 s. La unidad registró el límite efectivo de dos CPU y 4 GiB. En el pase final se observaron 72,1 MiB de memoria pico del grupo de procesos y 3,85 s de CPU acumulada. Son datos de la instancia sintética secuencial. El coste es una estimación superior con tarifas Flash de punta, sin descuento por caché. El registro persistente concilió USD 0,0671967 y no quedó una reserva pendiente. Se detuvo la unidad temporal al terminar. [Tarifa oficial](https://api-docs.deepseek.com/quick_start/pricing/)
+
+Las suites de corpus real quedaron preparadas para G01–G22 y ocho preguntas nuevas, con comparación por apartado, cita, abstención, latencia y coste. Para ejecutarlas se requiere autorización expresa sobre preguntas y contenido permitido, mínimo necesario, cuenta, destino, finalidad, retención y presupuesto. SPEC-002-AC-06 queda **VERIFIED únicamente con datos ficticios**. Generalización sobre el corpus privado, evaluación en Coder y pruebas de carga quedan **NOT RUN**. [Configuración y reproducción](../../README.md#deepseek-en-una-instancia-sintética-aislada) · [Evaluador](../../tests/financial/evaluate_deepseek.py)
+
+La regresión final con LLM_PROVIDER=financial-local reprodujo 14/14 casos financieros con 25/25 PNG, 11/11 de aceptación, 28/28 de la ampliación y B01–B10 con 10/10. Pasaron 68 pruebas Python, 5 subcasos y 6 pruebas Chromium. Se conserva el aviso conocido de Starlette. Las huellas de los 24 PDF coincidieron con el manifiesto y con el índice de 34.662 fragmentos. También pasaron el lock offline, el control de especificaciones y la frontera Git.
+
+**Archivos de esta entrega.** El punto de entrada está en apps/api/main.py. El adaptador, configuración, fixtures y protocolo HTTP están en apps/api/deepseek_agent.py, apps/api/deepseek_config.py, apps/api/deepseek_fixture.py y apps/api/deepseek_wire.py. HTTPX pasó de desarrollo al backend en pyproject.toml y uv.lock. Se modificaron los evaluadores tests/financial/evaluate_acceptance.py y tests/financial/evaluate_adversarial.py. Se añadieron tests/financial/evaluate_deepseek.py y tests/financial/test_deepseek.py. La configuración se documenta en README.md y los registros actualizados son esta auditoría, TRACEABILITY_MATRIX.md, EXECUTION_LOG.md y PROGRESS.md.
