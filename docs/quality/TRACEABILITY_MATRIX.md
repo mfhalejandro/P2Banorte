@@ -92,3 +92,13 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | SPEC-002-AC-06 · Proveedor real | Tool calling desde FastAPI con DeepSeek Flash. Una pasada G01–G22 autorizada, comparación de citas, 98 llamadas y ledger conciliado. | VERIFIED en el alcance autorizado. Fuera de esa muestra está NOT RUN. |
 
 [Resultados, controles y limitaciones](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#evaluación-ab-g01g22)
+
+### Rescate híbrido experimental
+
+| Criterio | Evidencia | Estado |
+|---|---|---|
+| SPEC-002-AC-01/02/03/05 y T-05/T-07/T-11 | Plan tipado sin herramientas remotas, comparabilidad y cálculos locales. Fallback ante timeout, plan inválido y presupuesto agotado. Regresiones 14/14, 11/11, 28/28, B01–B10 y Chromium. | VERIFIED en pruebas locales. |
+| SPEC-002-AC-06 · Ámbito híbrido | Pasada única autorizada G01–G22 con cuatro planes. Los 16 PASS de control conservaron evidencia y texto sin llamadas. Ledger original conciliado. | VERIFIED para la pasada autorizada. |
+| T-13 · Validación fuera de desarrollo | 21/22 en G01–G22 y 5/20 en cada variante local de J01–J20. El control sin términos propuestos fue mejor en G01. J16 conserva un fallo de moneda de la línea base. | PARTIAL. Mantener financial-local. |
+
+[Protocolo, evidencia e incidente inicial de P0](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#búsqueda-híbrida-experimental)

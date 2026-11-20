@@ -19,6 +19,20 @@ QUESTIONS = {
 }
 
 
+HYBRID_QUESTIONS = {
+    "indirect": "En el informe ficticio, ¿a qué se refiere el texto cuando habla de margen operativo?",
+    "definition": "¿A qué se refiere el informe ficticio cuando habla de margen de explotación?",
+    "sections": "Explica el margen operativo y describe la medida de liquidez de contingencia.",
+    "metrics": "¿Cuánto varió la utilidad neta de Grupo Faro del 3T24 al 3T25? Dame además el cambio del ROE en esos trimestres.",
+    "entity_metric": "¿En cuánto cambió la utilidad neta del grupo Grupo Faro entre 3T24 y 9M25?",
+    "complete": QUESTIONS["difference"],
+    "invalid": QUESTIONS["invalid"],
+    "partial": "Explica el margen operativo y describe la medida de liquidez de contingencia prometida.",
+    "absent": "¿Qué significa el riesgo crediticio intergaláctico?",
+    "restrictions": "¿Qué se entiende por margen operativo únicamente en el informe de Banco Aurora?",
+}
+
+
 def synthetic_corpus(directory: str) -> Corpus:
     root = Path(directory)
     pdfs = root / "pdf"

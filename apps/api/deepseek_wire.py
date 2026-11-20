@@ -70,13 +70,13 @@ class DeepSeekHTTP:
         payload = {
             "model": settings.model,
             "messages": messages,
-            "tools": tools,
-            "tool_choice": "none" if final_only else "auto",
             "thinking": {"type": "disabled"},
             "max_tokens": settings.max_output_tokens,
             "response_format": {"type": "json_object"},
             "stream": False,
         }
+        if tools:
+            payload.update(tools=tools, tool_choice="none" if final_only else "auto")
         # Cota conservadora por bytes UTF-8 más sobrecarga del protocolo. La
         # contabilidad definitiva usa los tokens que devuelve el proveedor.
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()

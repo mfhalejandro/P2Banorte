@@ -159,9 +159,9 @@ def inspect(root, cite):
         return {"access": access, "text": bool(text), "semantic": bool(semantic)}
 
 
-def assess(root, row, oracle, *, expected_mode=None):
+def assess(root, row, oracle, *, expected_mode=None, citation_check=inspect):
     expected, phrases, sources = oracle
-    checks = [inspect(root, cite) for cite in row["citations"]]
+    checks = [citation_check(root, cite) for cite in row["citations"]]
     matching = [cite for cite, check in zip(row["citations"], checks) if check["semantic"]]
     source_hits = all(any((filename, page) == (cite["filename"], cite["pdf_page"]) for cite in matching)
                       for filename, page, _ in sources)

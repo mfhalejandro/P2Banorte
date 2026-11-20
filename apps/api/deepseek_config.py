@@ -37,11 +37,11 @@ class DeepSeekSettings(BaseModel):
     ) / "p2banorte/deepseek-budget.sqlite3")
 
 
-def runtime_env():
+def runtime_env(*, hybrid=False):
     """Leer asignaciones permitidas, sin expansión, shell ni modificación del entorno."""
     names = {"LLM_PROVIDER", *(PREFIX + key.upper() for key in DeepSeekSettings.model_fields)}
     env = {key: os.environ[key] for key in names if key in os.environ}
-    if env.get("LLM_PROVIDER", "deepseek") != "deepseek":
+    if env.get("LLM_PROVIDER", "deepseek") != ("hybrid-experimental" if hybrid else "deepseek"):
         return env
     path = Path(os.environ.get("P2BANORTE_ENV_FILE", ROOT / ".env"))
     try:

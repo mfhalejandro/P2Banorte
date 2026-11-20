@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from apps.api.corpus import Corpus, SearchRequest, SourceRef
+from apps.api.agent import LocalExtractive
 from apps.api.main import create_app
 from fixture_pdf import example_corpus, write_pdf
 
@@ -50,7 +51,7 @@ def test_search_and_order(corpus):
 
 
 def test_chat_and_original(corpus):
-    with TestClient(create_app(corpus)) as api:
+    with TestClient(create_app(corpus, provider=LocalExtractive())) as api:
         response = api.post("/api/chat", json={"message": "¿Cuánto asciende la reserva de crédito Faro?"})
         assert response.status_code == 200
         data = response.json()
@@ -75,7 +76,7 @@ def test_definition_requires_the_right_topic_and_preserves_column(corpus):
         "Análisis de riesgo de crédito. Se define el incumplimiento a partir de 90 días de mora.",
     ])
     corpus.index()
-    with TestClient(create_app(corpus)) as api:
+    with TestClient(create_app(corpus, provider=LocalExtractive())) as api:
         result = api.post("/api/chat", json=question).json()
         assert result["status"] == "abstained" and result["citations"] == []
 
@@ -89,7 +90,7 @@ def test_definition_requires_the_right_topic_and_preserves_column(corpus):
         pdf.save(corpus.data / "Informe a columnas.pdf")
     corpus.index()
 
-    with TestClient(create_app(corpus)) as api:
+    with TestClient(create_app(corpus, provider=LocalExtractive())) as api:
         result = api.post("/api/chat", json=question).json()
         assert result["status"] == "answered"
         assert result["answer"] == "Riesgo de crédito: La pérdida potencial por la falta de pago de un acreditado o contraparte."
@@ -106,7 +107,7 @@ def test_definition_separates_source_constraint_and_citation_instructions(corpus
             document.new_page().insert_text((35, 100), f"Publicación de {issuer}.")
             document.save(corpus.data / f"Informe {issuer}.pdf")
     corpus.index()
-    with TestClient(create_app(corpus)) as api:
+    with TestClient(create_app(corpus, provider=LocalExtractive())) as api:
         for wording in ("¿Cómo se define", "¿Qué significa"):
             prompt = (f"{wording} el riesgo de crédito en los informes de Grupo Faro? "
                       "Indica el documento y la página donde figura la definición.")
@@ -135,14 +136,14 @@ def test_explanatory_answers_use_bounded_lists_with_local_context(corpus):
     policy_pdf("Sin respaldo.pdf", "Políticas de liquidez:", None)
     corpus.index()
     question = {"message": "¿Qué políticas de liquidez se mencionan?"}
-    with TestClient(create_app(corpus)) as api:
+    with TestClient(create_app(corpus, provider=LocalExtractive())) as api:
         result = api.post("/api/chat", json=question).json()
         assert result["status"] == "abstained" and result["citations"] == []
 
     policy_pdf("A.pdf", "Políticas de liquidez de grupo:", "Medir la liquidez todos los días.")
     policy_pdf("B.pdf", "Políticas de liquidez de banca:", "Establecer límites de liquidez.")
     corpus.index()
-    with TestClient(create_app(corpus)) as api:
+    with TestClient(create_app(corpus, provider=LocalExtractive())) as api:
         result = api.post("/api/chat", json=question).json()
         future = api.post("/api/chat", json={"message": "¿Qué políticas de liquidez adoptarán en el año 2035?"}).json()
     assert result["status"] == "answered"
@@ -178,7 +179,7 @@ def test_documentary_paraphrases_preserve_topic_entity_and_constraints(corpus):
         f"Enumera {topic} e indica el documento y la página de cada una.",
         f"Responde en viñetas; ¿Cuáles son {topic}? Enuméralas.",
     )
-    with TestClient(create_app(corpus)) as api:
+    with TestClient(create_app(corpus, provider=LocalExtractive())) as api:
         for query in asks:
             result = api.post("/api/chat", json={"message": query}).json()
             assert result["status"] == "answered" and result["provider_mode"] == "extractivo local"

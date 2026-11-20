@@ -348,3 +348,91 @@ Se detuvieron ambas unidades temporales. Se confirmó el bloqueo explícito con 
 **VERIFIED** ejecución de la A/B, tool calling real en la muestra autorizada y reproducción de los 16 PASS locales. **PARTIAL** generalización de ambos modos, con cobertura y fiabilidad inferiores de DeepSeek en esta muestra. **NOT RUN** inferencia sobre otras preguntas reales, producción, concurrencia y entorno final. La meta interna de 20/22 no se alcanzó. Con 22 casos, una pasada y variabilidad ya observada en sintéticos, la recomendación para la prueba real es mantener **financial-local**.
 
 El JSONL de 44 filas quedó en el temporal privado `/tmp/p2-ab.Ny33R7ie/results.jsonl`, SHA-256 `728d59e2ee2537788e89f5aad64a3cc20bbb7b93f6402f296b4e0a8db0c6ca9d`. Registra la pregunta literal, la respuesta, el modo, herramientas, abstenciones, citas y consumo por ID. La ejecución usó `tests/financial/evaluate_deepseek.py independent` con `--port 8196 --comparison-local-port 8197 --authorized-real-data --data <directorio del corpus>`. La bandera solo correspondía a la pasada autorizada. No se cambió el código ni se actualizó el resultado histórico del simulacro.
+
+## Búsqueda híbrida experimental
+
+**2026-11-19 · Codex · Trabajo posterior al simulacro.** Se reanudó con HEAD y origin/main en `b0722dd` y el árbol e índice Git limpios. Pasaron los preflights de integridad RCTF y escritura en raíz. Se verificaron los 24 PDF contra el índice SQLite de 34.662 fragmentos, la exclusión de los originales y de `.env` de Git y los permisos 0600 de `.env`. La API y la web permanentes seguían disponibles. El ledger original partía de USD 0,1305399. Se reutilizaron SPEC-001, SPEC-002, FTS5/BM25, PyMuPDF, Decimal y el contrato de chat y citas de V3.
+
+### Flujo y controles
+
+```mermaid
+flowchart LR
+    Q[Pregunta] --> L[Flujo local V3]
+    L --> V[Comprobar evidencia y apartados pendientes]
+    V -->|Cubierta o abstención protegida| R[Respuesta local]
+    V -->|Pendiente recuperable y egress autorizado| P[Un plan JSON opcional]
+    P --> A[Validar slots y términos]
+    A --> E[Recuperar evidencia y calcular localmente]
+    E --> C[Completar solo apartados verificados]
+    P -->|Fallo| R
+    A -->|Plan inválido| R
+    E -->|Falta respaldo| R
+```
+
+El detector contrasta resultados y citas del flujo inicial con definiciones reconocibles, apartados documentales separables y segundas métricas explícitas. Conserva las restricciones comprobables y protege las abstenciones locales por aditividad, duración, moneda y escala reconocidas, perímetro y fechas sin respaldo. En comparaciones de distinta duración puede explicitar el diagnóstico local si faltó en la primera salida. Para bancos nombrados con ausencia de evidencia, puede comprobar localmente el nombre en el índice. Ambos diagnósticos omiten el plan externo.
+
+El JSON tipado admite hasta dos apartados ya identificados por el backend, con un índice de apartado y hasta cuatro términos permitidos en cada búsqueda. El segundo indicador solicitado conserva los periodos y la entidad de la operación inicial cuando la redacción acredita que comparten esos parámetros. Cada subcálculo pasa por validación de fuentes y Decimal. La respuesta inicial se conserva ante un fallo y el texto identifica el apartado pendiente cuando procede. El modo mantiene un plazo de 15 s, hasta 24 herramientas compartidas, 5 s por llamada de planificación, una llamada por pregunta y una solicitud externa en vuelo. La llamada utiliza 4096 tokens de entrada como cota y 256 de salida, sin reintento.
+
+En `LLM_PROVIDER=hybrid-experimental`, la salida está bloqueada por defecto y la bandera global `DEEPSEEK_ALLOW_REAL_DATA` carece de efecto sobre el híbrido. Los ámbitos temporales `synthetic` y `authorized` requieren configuración explícita, techo del experimento y el ledger existente. El real requiere una lista privada de SHA-256 de preguntas literales. El destino recibe la pregunta permitida y los temas o términos derivados de ella. Las fuentes, pasajes, operandos y resultados de herramientas permanecen en FastAPI. La retención efectiva en la cuenta del proveedor sigue sin acreditarse. [Contrato JSON de DeepSeek](https://api-docs.deepseek.com/guides/json_mode/) · [Tarifa usada](https://api-docs.deepseek.com/quick_start/pricing/)
+
+### Regresiones y aislamiento
+
+| Verificación local | Resultado |
+|---|---|
+| Regresión financiera de 14 casos | 14/14, con igualdad de estado, texto, citas y trazas frente a la captura histórica de la misma suite. 25/25 PNG. |
+| Aceptación, ampliada y adversarial conocida | 11/11, 28/28 y B01–B10 10/10. |
+| Suite Python | 81 pruebas y 5 subcasos aprobados. 13 pruebas del híbrido, incluidas salida bloqueada, bypass, esquema, referencia inválida, timeout, presupuesto, evidencia ajena y preservación del resultado financiero. |
+| Smoke Chromium extractivo | 6/6 tras aislar el proveedor de las pruebas. |
+
+**Incidente en la primera regresión.** El smoke P0 y pruebas P0 con PDF ficticios heredaron el `.env` activo y usaron DeepSeek principal en vez del proveedor extractivo. El ledger predeterminado separado registró USD 0,0219033 estimados. El ledger original siguió en USD 0,1305399 durante el incidente. Las consultas que salieron correspondían a fixtures y el corpus de los 24 PDF no intervino. Se fijó `LocalExtractive` explícitamente en los dos puntos de arranque de P0 y se repitieron las pruebas con salida bloqueada. El incidente se conserva aparte de la medición autorizada del híbrido.
+
+### Pasada A/B autorizada · G01–G22
+
+El propietario autorizó una pasada G01–G22, una llamada por rescate, solo preguntas y términos derivados, techo acumulado USD 0,18, `https://api.deepseek.com` y `deepseek-flash` sin thinking. Hubo 44 POST en dos unidades de loopback con 2 CPU y 4 GiB cada una, orden local → híbrido dentro de cada par. Ambas usaron el mismo SQLite y los mismos PDF. Se verificaron las huellas del candidato antes y después, y la huella del bloque G01–G22 `3afb5fbef79046289efc91650c7326702efb542037c0b92ea66db58eaaec5e8a` coincidió con los oráculos históricos. Se conservó el orden para ambos y el sistema operativo pudo compartir caché de lectura.
+
+| Métrica | financial-local | hybrid-experimental |
+|---|---:|---:|
+| PASS / PARTIAL / FAIL | 16 / 1 / 5 | 21 / 0 / 1 |
+| PASS completo | 72,73 % | 95,45 % |
+| PNG accesibles / presentes / pertinentes | 25/25 en cada comprobación | 30/30 en cada comprobación |
+| POST mediana / P95 / máximo | 1,648 / 7,514 / 10,580 s | 1,732 / 11,435 / 13,621 s |
+| CPU acumulada / RAM pico | 68,66 s / 132,7 MiB | 78,51 s / 134,0 MiB |
+| HTTP 503 | 0 | 0 |
+| Llamadas / tokens entrada / salida | 0 / 0 / 0 | 4 / 1161 / 128 |
+
+La mejora fue de cinco aciertos (**+22,73 puntos porcentuales**). Los 16 PASS locales conservaron respuesta, estado, citas, advertencias y pasos, con cero llamadas externas. P95 es el percentil de rango más próximo. La mediana del tiempo adicional sobre el tramo local de los cuatro rescates fue 1,276 s y el máximo fue 8,038 s en G12. DeepSeek como agente principal se conserva como referencia histórica de 7/22 y tres 503.
+
+| Caso | Local → híbrido | Aporte verificado |
+|---|---|---|
+| G01 | FAIL → FAIL | Un plan. El buscador no acreditó la definición indirecta dentro de las lecturas permitidas. |
+| G03 | FAIL → PASS | Un plan. Definición de CCL en p. 153 de los estados del Grupo, con activos líquidos y salidas netas a 30 días. |
+| G05 | FAIL → PASS | Un plan. Objetivos y explicación de CCL sustentados por pp. 152 y 153. Se declara el alcance de la selección. |
+| G12 | PARTIAL → PASS | Un plan. Conservó utilidad neta 14.018 → 14.238 millones MXN (+220) y agregó ROE 23,3 % → 22,9 % (−0,4 puntos), con las cuatro celdas de pp. 5–6 del informe trimestral. |
+| G15 | FAIL → PASS | Sin llamada. Explicó trimestre frente a acumulado de distinta duración. |
+| G19 | FAIL → PASS | Sin llamada. Explicó ausencia de respaldo para la entidad solicitada. |
+
+Se activó planificación en 4/22 (18,18 %), las cuatro con déficit de respuesta verificable. Se completaron 3/4 rescates. G01 cuenta como activación justificada con recuperación fallida. Se observaron cero activaciones sobre respuestas completas y abstenciones protegidas en esta muestra. Se contrastaron los cinco nuevos respaldos y los cálculos resultantes con el PDF original. No se observó ninguna cita inventada, error crítico de monto, periodo o moneda, ni regresión entre los PASS conocidos.
+
+La pasada consumió USD 0,0005019 estimados como cota a tarifa sin caché. El ledger original concilió USD 0,1310418 acumulados tras la pasada, sin reservas pendientes. Se detuvieron ambas unidades y caducó la habilitación temporal. El modo de la demo y el `.env` global se conservaron. El índice y los PDF permanecieron intactos.
+
+### Control del aporte del modelo y muestra independiente J01–J20
+
+Se repitieron localmente los cuatro rescates del candidato congelado con un doble que habilita los apartados detectados sin agregar términos. G01, G03, G05 y G12 quedaron PASS en este control. DeepSeek obtuvo PASS en tres de esos cuatro. G15 y G19 se recuperaron con reglas locales incluso en la pasada real. La comparación reproduce que el mecanismo de verificación y ejecución local explica las recuperaciones observadas. Esta prueba no demuestra un aporte incremental del modelo. El efecto de los términos sugeridos sobre el ranking sigue siendo una fuente de variación.
+
+La muestra nueva consta de 20 preguntas distintas de G01–G22. Antes del primer POST se cotejaron los pasajes en los originales y, donde aplica, las filas, columnas y operandos, incluidos encabezados separados por espacios. Se congelaron el candidato y los oráculos. El evaluador con la muestra tiene SHA-256 `7d831c4d2ba78f7bd99834bfb2c19476a3e8afbbcf617c068e38e57efe1127dc`. El manifiesto del candidato tiene SHA-256 `8899a79104e4be8fb8e8002978df7783a927cc99cf8cd42b8fbe463a7e4101f2`. Se midió bajo 2 CPU y 4 GiB. Los tres recorridos fueron locales.
+
+| Recorrido J01–J20 | PASS / PARTIAL / FAIL | Citas cotejadas en página | POST mediana / P95 / máximo |
+|---|---:|---:|---:|
+| financial-local | 5 / 0 / 15 | 8/8 | 0,131 / 5,830 / 5,995 s |
+| Híbrido con salida bloqueada | 5 / 0 / 15 | 8/8 | 0,128 / 5,928 / 6,657 s |
+| Híbrido con planificador simulado en proceso | 5 / 0 / 15 | 8/8 | 0,106 / 5,769 / 5,959 s |
+
+Los PASS fueron J09, J17–J20. Los 15 restantes fallaron en las tres variantes. El detector activó cero planes en J01–J20 incluso con el doble disponible. J01–J08 tenían respaldo documental en los originales y quedaron fuera de las formas de consulta que el detector cubre. J10 falló al vincular el saldo con sus columnas y J11 se abstuvo por evidencia y perímetro, sin explicar que 4T25 queda fuera de 9M25. J12 y J13 quedaron en la ruta documental. J14 no pudo verificar el primer indicador ni llegó al segundo. J15 no resolvió un periodo expresado por referencia. Estos resultados muestran falsos negativos de cobertura en la interpretación y recuperación.
+
+**J16 es un fallo financiero compartido.** La pregunta exigía francos suizos. Ambos modos hicieron el cálculo correcto en su moneda de origen y devolvieron 970 millones de pesos. Las citas acreditan esos operandos en pesos y la respuesta incumple la moneda solicitada. El detector híbrido la clasificó como cubierta. El fallo no se modifica en la medición congelada. La salida para J01–J20 a DeepSeek queda **NOT RUN**.
+
+La etapa B de planificación DeepSeek con preguntas ficticias específicas queda **NOT RUN** mientras no haya confirmación separada del gasto. Los casos ficticios de plan, respuesta parcial, plan inválido y timeout sí se verificaron con MockTransport. La pasada C autorizada verificó la planificación real exclusivamente en G01–G22. Las llamadas incidentales del modo legado durante el arranque P0 quedan registradas como incidente de configuración.
+
+**VERIFIED** el contrato híbrido acotado, el fallback local, las regresiones, el alcance de salida y la pasada G01–G22. **PARTIAL** la generalización. La muestra nueva no mostró mejora y el control de rescates en G01–G22 no demostró beneficio incremental del modelo. **NOT RUN** la evaluación externa de J01–J20 y la prueba de concurrencia en el entorno final. Se recomienda mantener **financial-local** para la prueba real supervisada y conservar el híbrido como candidato experimental.
+
+La captura privada del experimento se conserva en `/tmp/p2-hybrid.G0ND2HOP`. `known-live.jsonl` contiene los 44 POST pares y tiene SHA-256 `6ba4ea0f5f1b708af96a2f0b858335af9aed95c135d1c4289ab7b58f2e15bbff`. `independent-local.jsonl` tiene SHA-256 `a1f7b0e405032f3a1246fd2b4091025df06493226e133ce61d1b99d18c8a6a70`. El [evaluador](../../tests/financial/evaluate_hybrid.py) reproduce los controles con `check-oracles`, `regression`, `known-mock` e `independent-local`, usando `--data` y el índice preexistente. La opción `known-live` exige una autorización vigente, servicios aislados de loopback y lista exacta. Los resultados históricos del simulacro se conservan.

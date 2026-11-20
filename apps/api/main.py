@@ -11,19 +11,56 @@ from .agent import Agent, ChatRequest, ChatResponse, LocalExtractive, ProviderUn
 from .corpus import Corpus
 from .deepseek_agent import DataNotAuthorized, DeepSeekAgent
 from .deepseek_config import SpendLedger, runtime_env, settings_from_env
-from .deepseek_fixture import synthetic_corpus
+from .deepseek_fixture import HYBRID_QUESTIONS, synthetic_corpus
 from .deepseek_wire import DeepSeekHTTP
 from .financial_agent import FinancialAgent, requires_financial_tools
+from .hybrid_agent import HybridAgent
+from .hybrid_planner import HybridPlanner, planner_settings, question_hash, read_allowlist
 
 
-def create_app(corpus=None, provider=None, financial_provider=None, *, deepseek_transport=None):
+async def configure_hybrid(app, stack, corpus, injected_planner, transport):
+    scope = os.getenv("HYBRID_DEEPSEEK_SCOPE", "blocked")
+    planner = injected_planner
+    effective = "in-process" if planner is not None else "blocked"
+    if planner is None and scope in {"synthetic", "authorized"}:
+        try:
+            if scope == "synthetic":
+                allowed = frozenset(question_hash(q) for q in HYBRID_QUESTIONS.values())
+            else:
+                allowed = read_allowlist(os.getenv("HYBRID_DEEPSEEK_ALLOWLIST"))
+            settings = planner_settings()
+            if settings.api_key.get_secret_value():
+                meter = SpendLedger(settings.budget_file, settings.budget_usd)
+                client = await stack.enter_async_context(httpx.AsyncClient(
+                    trust_env=False, follow_redirects=False, transport=transport,
+                ))
+                planner = HybridPlanner(DeepSeekHTTP(settings, meter, client), allowed)
+                effective = scope
+        except (OSError, ValueError, sqlite3.Error, ProviderUnavailable):
+            pass  # El backend conserva el modo local aun con egress deshabilitado.
+    if scope == "synthetic" and injected_planner is None:
+        directory = stack.enter_context(TemporaryDirectory(prefix="p2-hybrid-fixture-"))
+        corpus = synthetic_corpus(directory)
+    app.state.corpus = corpus or Corpus.configured()
+    app.state.agent = HybridAgent(Agent(app.state.corpus, LocalExtractive()), FinancialAgent(app.state.corpus), planner)
+    app.state.hybrid_ready = planner is not None
+    app.state.external_data_scope = effective
+    app.state.provider_available = True
+    app.state.financial_enabled = False
+    app.state.deepseek_enabled = False
+
+
+def create_app(corpus=None, provider=None, financial_provider=None, *, deepseek_transport=None, hybrid_planner=None):
     @asynccontextmanager
     async def lifespan(app):
         injected = provider is not None or financial_provider is not None
         env = {} if injected else runtime_env()
         mode = env.get("LLM_PROVIDER", os.getenv("LLM_PROVIDER", "extractive"))
         async with AsyncExitStack() as stack:
-            if mode == "deepseek" and not injected:
+            app.state.hybrid_enabled = mode == "hybrid-experimental" and not injected
+            if app.state.hybrid_enabled:
+                await configure_hybrid(app, stack, corpus, hybrid_planner, deepseek_transport)
+            elif mode == "deepseek" and not injected:
                 settings = settings_from_env(env)
                 if settings.synthetic and settings.allow_real_data:
                     raise ProviderUnavailable("Los modos sintético y de corpus real son excluyentes.")
@@ -71,7 +108,11 @@ def create_app(corpus=None, provider=None, financial_provider=None, *, deepseek_
     @app.get("/api/health")
     def health():
         docs = app.state.corpus.catalog()
-        result = {"status": "ok", "documents": len(docs), "provider_mode": app.state.agent.provider.mode}
+        mode = app.state.agent.mode if app.state.hybrid_enabled else app.state.agent.provider.mode
+        result = {"status": "ok", "documents": len(docs), "provider_mode": mode}
+        if app.state.hybrid_enabled:
+            result["external_data_scope"] = app.state.external_data_scope
+            result["external_provider_ready"] = app.state.hybrid_ready
         if app.state.deepseek_enabled:
             result["external_data_scope"] = app.state.external_data_scope
             result["external_provider_ready"] = app.state.deepseek_ready
@@ -93,7 +134,7 @@ def create_app(corpus=None, provider=None, financial_provider=None, *, deepseek_
             agent = app.state.documentary_agent
         metrics = {}
         try:
-            if app.state.deepseek_enabled:
+            if app.state.deepseek_enabled or app.state.hybrid_enabled:
                 result = await agent.answer(question, metrics=metrics)
                 response.headers.update(metrics)
                 return result
