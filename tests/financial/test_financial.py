@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from apps.api.corpus import Citation, Corpus
 from apps.api.finance import Abstain, Operand, PERIOD, Unit, calculate, decimal_from_source, display, local_period
-from apps.api.financial_agent import LocalToolDouble, ToolCall, parse_intent, requires_financial_tools
+from apps.api.financial_agent import LocalToolDouble, ToolCall, normalize_periods, parse_intent, requires_financial_tools
 from apps.api.financial_evidence import balance_operand
 from apps.api.main import create_app
 from fixtures import example, report
@@ -29,6 +29,24 @@ CHANGE = "Calcula la variación porcentual de la utilidad neta de Grupo Faro ent
 def test_operational_paraphrases_have_typed_periods(question, expected):
     intent = parse_intent(question)
     assert (intent.base.label, intent.current.label, intent.operation) == expected
+
+
+def test_entity_complement_stops_at_clause_but_keeps_unrecognized_name():
+    template = "Determina la diferencia de utilidad neta de {} cuando compares 2T24 y 3T24."
+    assert parse_intent(template.format("Grupo Financiero Banorte")).entity == "GFNorte"
+    assert parse_intent(template.format("GFNorte Horizonte")).entity == "GFNorte Horizonte"
+    assert parse_intent(template.format("Banco Crédito y Ahorro")).entity == "Banco Crédito y Ahorro"
+
+
+def test_operational_diagnostics_do_not_require_complete_periods():
+    assert normalize_periods("primer y cuarto trimestres de 2025") == "1T25 y 4T25"
+    with pytest.raises(Abstain, match="no es aditiva"):
+        parse_intent("Suma el capital contable de Grupo Faro al cierre de dos trimestres.")
+    question = "Dame la diferencia de utilidad neta de Grupo Faro en yenes japoneses (JPY)."
+    assert requires_financial_tools(question)
+    with pytest.raises(Abstain, match="moneda solicitada"):
+        parse_intent(question)
+    assert not requires_financial_tools("Indica la diferencia entre las políticas de liquidez.")
 
 
 def test_balance_geometry_requires_the_original_row_and_two_unambiguous_periods():

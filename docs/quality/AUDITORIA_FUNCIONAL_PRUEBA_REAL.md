@@ -652,3 +652,101 @@ M obtuvo **5 PASS, 3 PARTIAL y 4 FAIL**. Dos de tres rescates completaron el apa
 **Veredicto.** Generalización PARTIAL. L y J evidencian mejor cobertura de familias conocidas, mientras que M muestra carencias en delimitación de cláusulas, periodos y entidades. Precisión financiera VERIFIED para las operaciones emitidas y contrastadas. La cobertura financiera abierta sigue PARTIAL. Regresiones VERIFIED para las suites citadas. DeepSeek NOT RUN en este trabajo.
 
 Reproducción local. En `/tmp/p2-generalization-2fa82a6/` quedaron las entradas literales, el oráculo M congelado, el arranque de SQLite de solo lectura `bench_app.py`, el ejecutor HTTP `run_cases.py`, los calificadores y los JSONL. La comparación L usa `L-before.jsonl` y `L-final.jsonl`. Las suites conocidas usan `known-final.jsonl`, `control-final.jsonl` y `robust.jsonl`. M usa `M-final.jsonl` y `M-verdicts.jsonl`. Los archivos se mantienen en el área local de evaluación. Para iniciar la demo o revertir a financial-local se usa el mismo bloque de arranque del README. [Arranque y reversión](../../README.md#rescate-determinista-en-la-demo-web)
+
+## Robustez semántica del híbrido determinista · base cea74aa
+
+Diagnóstico previo. HEAD y origin/main coincidían en `cea74aa` y el árbol estaba limpio. El contenido publicado de la API coincide con el candidato local medido al cierre anterior. Se archivaron los archivos iniciales, el diff y el manifiesto SHA-256 en `/tmp/p2-semantic-cea74aa/`. La reproducción de M conservó preguntas y oráculos y obtuvo 5 PASS, 3 PARTIAL y 4 FAIL.
+
+| ID | Antes | Primera etapa determinante |
+|---|---|---|
+| M01 | PASS | El rescate documental acredita la definición de riesgo de crédito. |
+| M02 | FAIL | La segmentación detecta dos apartados. La normalización entrega al planificador verbos de presentación y carece de facetas para metodología y destinatario mensual. |
+| M03 | PASS | El rescate verifica el alcance de la Tenedora en el texto. |
+| M04 | PASS | El análisis y las celdas acreditan la diferencia de acumulados. |
+| M05 | FAIL | La cola del indicador se captura como entidad `GFNorte si tomo`. La verificación rechaza operandos de la entidad solicitada. |
+| M06 | FAIL | El separador con comas no divide la pregunta. El analizador recibe periodos de dos cálculos. |
+| M07 | PASS | La calculadora verifica participación con numerador y denominador de una misma tabla. |
+| M08 | FAIL | La extracción entrega `GFNorte entre los cierres` como entidad. Se descartan las celdas al verificarla. |
+| M09 | PARTIAL | El ordinal coordinado queda sin normalizar y el analizador exige los dos periodos antes de diagnosticar la no aditividad. |
+| M10 | PARTIAL | La forma nominal «Dame la diferencia» no activa la ruta financiera. El validador de divisa nunca recibe la consulta. |
+| M11 | PASS | Se acredita el distinto tipo o duración, con cifras citadas y sin cálculo. |
+| M12 | PARTIAL | El contexto que antepone fechas sustituye al indicador. El recuperador busca fechas como métrica y no llega a verificar la nota de perímetro. |
+
+N01–N16 se congeló antes de modificar producción. Sus oráculos se cotejaron contra los PDF y las celdas se validaron por alineación. SHA-256 de `N.json` `f9dc1a78f6a610907753ef673d73e3b7c463177eb3b3c5abd05a7d1af2039e8e`. El plan del sprint mantiene el contrato de P0 y SPEC-002. Corrige el análisis, ejecuta las regresiones sobre el corpus de solo lectura y mide N una sola vez después de congelar el diff.
+
+### Implementación y regresión M
+
+Se cambió la gramática del indicador para separar el complemento de entidad de conectores y fechas. La validación sigue comparando la entidad completa del operando. Una petición nominal entra al flujo financiero y comprueba divisas. Una suma de stock recibe un diagnóstico aun si los periodos no se resolvieron. Los ordinales coordinados comparten el sustantivo temporal y el año explícito cuando hay un enlace inequívoco. Una cláusula de contexto que contiene periodos aporta fechas y deja que el núcleo nominal identifique el indicador. La base consolidada solicitada se comprueba en los operandos y las notas de perímetro siguen siendo vinculantes.
+
+La composición afina los delimitadores de apartados y conserva las fechas de cada intención. El respaldo y el cálculo se resuelven para cada operación. La parte pendiente se declara cuando falta evidencia. En documentos, los verbos iniciales de presentación se excluyen de la búsqueda por apartado. La verificación aplica facetas de metodologías, receptor y periodicidad y conserva el alcance del informe. Las herramientas de lectura reutilizan las filas físicas de tablas ya parseadas dentro de la misma solicitud, por SHA-256 y página. Se conserva la validación de cada celda, de su fila, encabezado, entidad y perímetro.
+
+| ID | Antes → después | Resultado cotejado |
+|---|---|---|
+| M01 | PASS → PASS | Definición de riesgo de crédito, informe anual, p. 29. |
+| M02 | FAIL → PASS | Metodologías y receptor mensual, CPR. Dos pasajes de EEFF 2025, p. 153. |
+| M03 | PASS → PASS | Las políticas de la Tenedora no acreditan alcance a todas las filiales, EEFF 2025, p. 152. |
+| M04 | PASS → PASS | 39.375 → 42.464, diferencia de +3.089 millones de pesos, 3T24, p. 5. |
+| M05 | FAIL → PASS | 30.761 → 22.300 millones de dólares, −27,51 %, 2T24, p. 7. |
+| M06 | FAIL → PASS | ROA +0,1 pp y utilidad neta +7,31 %, 3T24, pp. 6 y 5, con cuatro celdas. |
+| M07 | PASS → PASS | 33,53 % de participación de 3T24 en 9M24, 3T24, p. 5. |
+| M08 | FAIL → PASS | Activo total 2.298.368 → 2.420.031, +121.663 millones de pesos, 3T24, p. 6. |
+| M09 | PARTIAL → PASS | Capital contable como saldo no aditivo, sin buscar ni calcular. |
+| M10 | PARTIAL → PASS | Divisa JPY no acreditada, sin buscar ni calcular. |
+| M11 | PASS → PASS | Duraciones incompatibles, con ambas cifras de 3T24, p. 5, y sin cálculo. |
+| M12 | PARTIAL → PASS | Desconsolidación de Bineo sin base común, nota de 3T25 citada y sin cálculo. |
+
+M pasó de 5 a 12 aciertos completos. Se conservaron los dos rescates previos que completaban el apartado. El rescate documental de M02 pasó a completo y se activó uno nuevo para la segunda operación de M06. Hubo cuatro rescates completos y cero fallidos. La inspección cotejó 20/20 PNG accesibles, 20/20 citas textuales y pertinentes, incluidas 15 celdas citadas. La medición incluyó 98 herramientas y 55 lecturas. La respuesta compuesta más lenta fue M06 con 7,987 s y 20 herramientas.
+
+Sobre L comparable, el candidato pasó 25/25 y conservó las 42 citas y las 31 celdas citadas. Con cuota de 2 CPU y 4 GiB, la mediana, P95 por rango más próximo y máximo del POST fueron 1,374 / 9,490 / 10,236 s antes y 1,397 / 8,444 / 8,781 s después. Se mantuvieron 225 herramientas, 124 lecturas lógicas y 11 rescates. CPU de la unidad durante la batería, con render PNG, pasó de 78,31 s a 64,89 s. Los picos acumulados de las unidades, que también habían ejecutado M, fueron 179,0 y 168,7 MiB. Se observa mejora de cola en estas pasadas bajo carga compartida. Se conservan 15 s y 24 herramientas por solicitud.
+
+### Regresiones reejecutadas
+
+| Batería | PASS / PARTIAL / FAIL | Citas semánticamente pertinentes |
+|---|---:|---:|
+| Visual | 20 / 0 / 0 | 31/31 |
+| G01–G22 | 22 / 0 / 0 | 29/29 |
+| J01–J20 | 15 / 3 / 2 | 21/21 |
+| K01–K12 | 11 / 0 / 1 | 14/14 |
+| L01–L25 | 25 / 0 / 0 | 42/42 |
+| M01–M12 | 12 / 0 / 0 | 20/20 |
+| R01–R14 | 14 / 0 / 0 | 25/25 |
+| Aceptación | 11 / 0 / 0 | 10/10 |
+| Ampliada | 28 / 0 / 0 | 34/34 |
+| B01–B10 | 10 / 0 / 0 | 16/16 |
+
+Visual, G, J, K y L conservaron sus veredictos conocidos. J03, J04 y J07 siguen parciales. J06, J15 y K01 siguen fallidos. En J hubo un rescate parcial y uno sin verificación. K registró un rescate sin verificación. Las 112 pruebas Python y los cinco subcasos pasaron, al igual que los seis casos del smoke Chromium P0. Los tests de DeepSeek utilizaron dobles de transporte con salida de red deshabilitada. La validación financiera preservó los rechazos por plazo, moneda, entidad y perímetro, y el control mantuvo el fallback seguro.
+
+### Muestra N congelada
+
+El diff de producción respecto de `cea74aa` se congeló con SHA-256 `d6c617c0d58882fec68d8b261eaffc977b26db1db584ab93dde31df0b0243d42`. Se hizo una sola pasada N con las mismas reglas de veredicto de M. Los casos exigen hechos, fuentes y celdas declarados antes de la ejecución. No hubo medición de línea base en N. El código se mantuvo congelado tras la pasada.
+
+| ID | Veredicto | Resultado y limitación |
+|---|---|---|
+| N01 | FAIL | Las categorías del portafolio no se reconocen como una solicitud de segmentación. Se arrastró «página» al tema de búsqueda. |
+| N02 | FAIL | El tema del CCL absorbió la condición de estrés y la instrucción sobre el intervalo. Faltó una definición acreditada. |
+| N03 | PASS | Verificó que el reporte trimestral se dirige al Consejo de Administración, EEFF 2025, p. 153. |
+| N04 | PASS | Verificó identificación del cliente y validación de información bajo originación, informe anual, p. 30. |
+| N05 | FAIL | No normalizó los dos rangos de meses a trimestres. La consulta de ROE quedó en la ruta documental. |
+| N06 | FAIL | Acreditó el operando base de ingresos por intereses. Rechazó el segundo por cifras o bases incompatibles entre las fuentes candidatas. |
+| N07 | FAIL | El texto declarativo «está publicada» se incorporó al nombre de la entidad. No se verificó la comparación en dólares. |
+| N08 | FAIL | La formulación «se atribuye» no activó la operación de participación. |
+| N09 | FAIL | La lectura de capital contable no encontró una celda con entidad y base inequívocas para ambas fechas. |
+| N10 | PARTIAL | Citó las medidas de gestión en EEFF 2025, p. 153. El detector omitió el apartado de divulgación y marcó el único slot que había identificado como completo. |
+| N11 | FAIL | No separó la operación de ROA de la de utilidad neta con su requisito explícito de moneda. |
+| N12 | FAIL | «En cuánto difiere» y «capitalización» sin el nombre completo del indicador no activaron la comparación bursátil. |
+| N13 | PASS | Rechazó CAD sin conversión ni cálculo. |
+| N14 | PARTIAL | Se abstuvo por la ruta documental. Faltó el diagnóstico de no aditividad del pasivo total. |
+| N15 | PASS | Rechazó la entidad solicitada sin sustituirla por otra. |
+| N16 | PARTIAL | Se abstuvo sin calcular. La restricción condicional interrumpió el análisis antes de explicar que 3T24 está fuera de 6M24. |
+
+N dio **4 PASS, 3 PARTIAL y 9 FAIL**. Sus 4 citas abrieron PNG y se verificaron textual y semánticamente. Una era una celda financiera válida presentada como evidencia parcial. Los cuatro negativos esperados se abstuvieron. Cinco consultas activaron rescate. Dos completaron la solicitud, una acreditó solo un apartado y dos quedaron sin verificación. La mediana, P95 y máximo del POST fueron 0,204 / 7,058 / 7,058 s. Se usaron 70 herramientas, 35 lecturas de fuente y un máximo de 12 herramientas en una pregunta. La CPU acumuló 20,86 s durante N, incluido el render. El pico acumulado de la instancia fue 279,5 MiB con las regresiones previas. La latencia incluye las abstenciones rápidas y no mide el costo de contestar correctamente todos los casos.
+
+### Evidencia y operación
+
+El área local `/tmp/p2-semantic-cea74aa/` conserva `N.json`, `N-final.jsonl`, `N-verdicts.jsonl`, los manifiestos, los JSONL antes y después de M y L, el plan emitido y los resultados de las regresiones. `bench_app.py` usa el FastAPI de producción con SQLite de solo lectura. Las ejecuciones usaron solo loopback y las cabeceras acreditaron cero llamadas, tokens y USD externos. La integridad revalidó los ocho RCTF, los 24 PDF, SQLite, el ledger local comprobado y `.env`. El gate de publicación mantuvo fuera del árbol Git el oráculo exploratorio y los registros locales.
+
+La demo en 8194/5194 conserva el proceso de inicio del preflight. Para cargar el candidato, reinicia `p2banorte-api.service` si la unidad actual ya usa el híbrido local y comprueba `/api/health` a través de Vite. Para arrancar o revertir usa el bloque existente con `P2BANORTE_LOCAL_MODE=hybrid-experimental` o `P2BANORTE_LOCAL_MODE=financial-local`. [Arranque y reversión](../../README.md#rescate-determinista-en-la-demo-web)
+
+Chromium comprobó M02 y M06 desde Vite aislado en 5205 con FastAPI en 8205. Ambas respuestas acreditaron los apartados esperados y abrieron los PNG de las páginas 153 y 6 respectivamente.
+
+**Veredictos.** Precisión financiera VERIFIED en los cálculos emitidos y acreditados, con cobertura de nuevas formulaciones PARTIAL. Recuperación documental PARTIAL. Consultas compuestas PARTIAL. Generalización PARTIAL. Regresiones VERIFIED en las suites reejecutadas.

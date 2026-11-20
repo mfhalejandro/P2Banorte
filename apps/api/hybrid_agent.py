@@ -49,6 +49,9 @@ RESTRICTION = re.compile(
 INDIRECT = re.compile(r"\b(?:a que se refiere|que se entiende|a que alude|como describ\w*|que significa)\b")
 GENERIC_INDIRECT = re.compile(r"\b(?:habla|hablan|alude|aluden) de(?:l)? (?:la |el )?([a-z ]{3,64})$")
 DOC_SPLIT = re.compile(r"(?:\s+y[,]?\s+|[;?]\s*)(?=(?:[¿]?)(?:explica|describe|define|enumera|por separado|c[oó]mo se|a qui[eé]n)\b)", re.I)
+DOC_LEAD = re.compile(
+    r"^(?:(?:explica|describe|define|enumera|senala|presenta|identifica|por separado|aparte)\b[, :]+)+"
+)
 SECOND_METRIC = re.compile(
     r"^(?:dame |indica |muestra |calcula |estima )?(?:ademas |tambien |aparte )?(?:el |la )?"
     r"(?P<operation>cambio|diferencia|variacion|crecimiento)(?: (?P<relative>porcentual|relativ[oa]))? "
@@ -59,8 +62,9 @@ EXTRA_FINANCIAL = re.compile(r"[.?!;]\s+(?=(?:[¿¡]\s*)?(?:dame|indica|muestra|
 INDEPENDENT_OPERATIONS = re.compile(r"\bprimero[, :]\s*(.+?)(?:[;.]\s*|\s+)segundo[, :]\s*(.+)", re.I)
 PARALLEL_METRICS = re.compile(r"\btanto\s+(?:el\s+|la\s+)?([^,.;?]+?)\s+como\s+(?:el\s+|la\s+)?", re.I)
 COORDINATED_FINANCE = re.compile(
-    r"(?:,?\s+y\s+(?:por (?:separado|otro lado),?\s+)?|[;]\s*)(?="
-    r"(?:calcula|muestra|dame|indica|estima)\b|(?:el|la)\s+(?:cambio|variaci[oó]n|movimiento|diferencia|crecimiento)\b)",
+    r"(?:,?\s+y,?\s+(?:por (?:separado|otro lado|otra parte),?\s+)?|[;]\s*)(?="
+    r"(?:calcula|muestra|dame|indica|estima|determina|reporta)\b|"
+    r"(?:el|la)\s+(?:cambio|variaci[oó]n|movimiento|diferencia|crecimiento)\b)",
     re.I,
 )
 DEFINITION_VERB = re.compile(
@@ -104,6 +108,8 @@ REPORT_YEAR = re.compile(
 )
 FREQUENCY = ("mensual", "semanal", "trimestral", "anual", "diari")
 PERSONS = ("cpr", "consejo", "directivo", "administracion", "grupo")
+REPORT_RECIPIENT = re.compile(r"\b(?:a qui[eé]n|qui[eé]n recibe|destinatario\w*|a que organo)\b")
+REPORT_FORM = re.compile(r"\b(?:inform\w*|report\w*)\b")
 PORTFOLIO = r"\b(?:(?:segment\w*|divid\w*|separ\w*)\b.{0,80}\bportafolio|segmentos?\b.{0,80}\bcredito)\b"
 ORIGINATION = r"\b(?:control\w*|mitigante\w*|verific\w*|valid\w*)\b.{0,95}\boriginacion\b"
 LIQUIDITY_TOOLS = r"\b(?:herramientas|medidas|metodologias)\b.{0,70}\b(?:gestion|contingencia|operativas)\b"
@@ -190,11 +196,22 @@ def document_needs(question):
         cleaned = re.sub(r"\b(?:en |del? )?(?:los )?(?:informes?|reportes?|documentos?|estados financieros)"
                          r"(?: anual)?(?: de (?:la )?(?:tenedora|gfnorte|banorte)| de 20\d{2})", "", cleaned).strip()
         cleaned = re.sub(r"\b(?:de|para) (?:la )?(?:tenedora|gfnorte|banorte)\b", "", cleaned).strip()
-        cleaned = re.sub(r"^(?:explica|describe|define|enumera|por separado) (?:aparte |por separado )?", "", cleaned).strip()
+        cleaned = DOC_LEAD.sub("", cleaned).strip()
         topic = definition_topic(cleaned.rstrip(" ,"))
         facets = ()
         anchor = None
-        if topic:
+        period = tuple(frequency for frequency in FREQUENCY if re.search(rf"\b{frequency}\w*\b", cleaned))
+        management = ("liquidez" in keys or scope == "tenedora") and re.search(LIQUIDITY_TOOLS, cleaned)
+        reporting = ("liquidez" in keys or scope == "tenedora") and REPORT_FORM.search(cleaned)
+        if reporting and period and REPORT_RECIPIENT.search(cleaned):
+            kind, topic = "passage", "liquidez reportes"
+            facets = (*((frequency,) for frequency in period), PERSONS)
+        elif management:
+            kind, topic = "passage", "riesgo de liquidez"
+            facets = (("brechas", "indicador"), ("pruebas",))
+            if "contingencia" in terms(cleaned):
+                facets += (("contingencia",),)
+        elif topic:
             kind = "definition"
         elif INDIRECT.search(cleaned) or indirect_definition(part):
             candidates = [topic for topic, aliases in TOPIC_ALIASES.items()
@@ -233,7 +250,8 @@ def document_needs(question):
             return []
         needs.append(DocumentNeed(topic=CANONICAL_TOPICS.get(normalize(topic), topic), kind=kind,
                                   scope=scope, year=year, report=report, facets=facets, anchor=anchor,
-                                  current_report=bool(scope and year is None and topic == "liquidez reportes")))
+                                  current_report=bool(scope and year is None
+                                                      and (reporting or management or topic == "liquidez reportes"))))
     return needs
 
 
@@ -655,7 +673,7 @@ class HybridAgent:
                                                      "restricciones": constraints.model_dump(mode="json")}], totals, budget)
             if not chosen:
                 return pending, stage
-            trace = Trace()
+            trace = Trace(tables=primary_trace.tables) if primary_trace is not None else Trace()
             budget.attempted[0] = "calculation"
             try:
                 async with asyncio.timeout_at(budget.deadline - 0.05):

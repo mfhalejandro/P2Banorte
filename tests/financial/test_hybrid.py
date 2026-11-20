@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from apps.api.deepseek_config import SpendLedger, USD_NANO
 from apps.api.deepseek_fixture import HYBRID_QUESTIONS
 from apps.api.financial_agent import parse_intent
-from apps.api.hybrid_agent import split_financial_operations
+from apps.api.hybrid_agent import document_needs, split_financial_operations
 from apps.api.hybrid_planner import question_hash
 from apps.api.main import create_app
 
@@ -27,6 +27,26 @@ def test_ordered_operations_keep_separate_periods_and_units():
     assert [i.percentage_points for i in intents] == [False, True]
     assert split_financial_operations("Calcula el cambio de utilidad neta entre 6M23 y 6M24 "
                                      "y calcula el cambio del ROE entre 1T24 y 2T24. Usa GBP.") is None
+
+
+def test_punctuated_composition_keeps_operations_and_calendar_separate():
+    parts = split_financial_operations(
+        "Indica la diferencia del ROE de Grupo Faro entre 1T24 y 3T24 y, por otra parte, "
+        "calcula la variación de utilidad neta de 6M23 a 6M24."
+    )
+    first, second = map(parse_intent, parts)
+    assert (first.operation, first.base.label, first.current.label) == ("difference", "1T24", "3T24")
+    assert (second.operation, second.base.label, second.current.label) == ("percent_change", "6M23", "6M24")
+
+
+def test_documentary_presentation_is_separated_from_evidence_facets():
+    methods, reports = document_needs(
+        "Presenta las metodologías de gestión de liquidez de la Tenedora y describe, por separado, "
+        "a quién se envían los informes trimestrales."
+    )
+    assert ("pruebas",) in methods.facets
+    assert ("trimestral",) in reports.facets and ("mensual",) not in reports.facets
+    assert {"presenta", "describe", "separado"}.isdisjoint(methods.permitted + reports.permitted)
 
 
 @pytest.fixture

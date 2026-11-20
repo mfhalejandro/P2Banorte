@@ -133,3 +133,13 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | SPEC-002-AC-06 | Pruebas locales con alcance externo bloqueado. Cero llamadas, tokens y costo. | NOT RUN en este trabajo. |
 
 [Diagnóstico, comparaciones y límites](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#generalización-del-híbrido-determinista--línea-base-2fa82a6)
+
+### Robustez semántica del híbrido determinista
+
+| Criterio | Evidencia | Resultado |
+|---|---|---|
+| SPEC-002-AC-01/02/03/05, T-05/T-07/T-11 | Delimitación de entidades, periodos y apartados. M05/M06/M08 en Decimal y M09/M10/M12 con diagnóstico específico. R01–R14 y pruebas negativas. | VERIFIED para cálculos emitidos y regresiones financieras. |
+| SPEC-001 y T-13 | M02 acreditó dos apartados. Visual 20/20, G 22/22, J 15/20, K 11/12 y L 25/25 conservan los veredictos. N obtuvo 4 PASS, 3 PARTIAL y 9 FAIL. | Regresiones VERIFIED. Recuperación, composición y generalización PARTIAL. |
+| SPEC-002-AC-06 | Instancias locales con modo determinista y salida bloqueada. Cero llamadas, tokens y USD externos. | NOT RUN. |
+
+[Diagnóstico, resultados y recursos](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#robustez-semántica-del-híbrido-determinista--base-cea74aa)

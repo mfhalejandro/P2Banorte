@@ -194,3 +194,7 @@ Se ejecutó `systemctl --user restart p2banorte-api.service` y se confirmó el c
 ## 2026-11-20T23:22:56+01:00 · Diagnóstico y generalización del híbrido determinista
 
 Codex reanudó en `2fa82a6` y conservó la edición de bitácora que ya estaba en el árbol. Ejecutó L por HTTP antes del cambio, cotejó los PDF y congeló M. Las instancias temporales usaron `uvicorn bench_app:app`, SQLite de solo lectura, dos CPU, 4 GiB y solo loopback. El candidato final dio 25/25 en L y 5/12 en M. Pasaron las regresiones publicadas en el informe, 108 pruebas Python y los 6 smoke de Chromium. La demo en 8194/5194 comprobó L02 y L15 con PNG originales. No se ejecutó DeepSeek. [Informe](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#generalización-del-híbrido-determinista--línea-base-2fa82a6)
+
+## 2026-11-21T00:02:42+01:00 · Robustez semántica del híbrido
+
+Se reanudó en `cea74aa` con HEAD y origin/main alineados. Se respaldó la base fuera del repositorio, se verificó RCTF y se congeló N. Las instancias temporales de FastAPI corrieron con SQLite de solo lectura, 2 CPU, 4 GiB y salida bloqueada. M pasó de 5/12 a 12/12 y N obtuvo 4 PASS, 3 PARTIAL y 9 FAIL en una sola pasada. Pasaron 112 pruebas Python, cinco subcasos y seis smoke Chromium. [Diagnóstico, regresiones y recursos](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#robustez-semántica-del-híbrido-determinista--base-cea74aa)

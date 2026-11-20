@@ -21,6 +21,8 @@ INDICATORS = re.compile(r"indicadores financieros\s+([^\n|]+)", re.I)
 ROW_NOTE = re.compile(r"\s+\((\d{1,2})\)\s*$")
 BALANCE_TITLE = re.compile(r"estadodesituacionfinanciera|estadosituacionfinanciera|balancegeneral")
 BALANCE_ROWS = {"activo total", "capital contable", "pasivo total"}
+TableRows = tuple[tuple[tuple[str, ...], ...], ...]
+TableCache = dict[tuple[str, int], TableRows]
 
 
 def balance_heading(text):
@@ -184,13 +186,19 @@ def defined_metric(page, label, metric):
     return TABULAR_LINES.sub(" ", lines[0].strip().rstrip(".").casefold())
 
 
-def table_operands(page, period, metric, citation, notes, note_citation):
+def table_operands(page, period, metric, citation, notes, note_citation, tables: TableCache | None = None):
     candidates = []
     matched_rows = False
+    key = citation.doc_id, citation.pdf_page
+    parsed = tables.get(key) if tables is not None else None
+    if parsed is None:
+        parsed = tuple(tuple(tuple(cell or "" for cell in row) for row in table.extract())
+                       for table in page.find_tables().tables)
+        if tables is not None:
+            tables[key] = parsed
     page_context = "\n".join(line for line in page.get_text().splitlines()
                              if ENTITY.match(line) or CURRENCY.fullmatch(line.strip(" ()")) or ADDITIVE.match(line))
-    for table_no, table in enumerate(page.find_tables().tables):
-        rows = [[cell or "" for cell in row] for row in table.extract()]
+    for table_no, rows in enumerate(parsed):
         scope = f"{citation.doc_id}:{citation.pdf_page}:{table_no}"
         first_metric = next((i for i, row in enumerate(rows) if row and metric_label(row[0]) == normalize(metric)), None)
         if first_metric is None:
@@ -355,7 +363,8 @@ def market_operand(corpus, document, page, citation, metric, period, other, requ
                         comma_grouping, note_citation, market_entity=min(entities))
 
 
-def read_operand(corpus, ref, metric, period, *, other=None, requested_currency=None, requested_scale=None):
+def read_operand(corpus, ref, metric, period, *, other=None, requested_currency=None, requested_scale=None,
+                 tables: TableCache | None = None):
     citation = corpus.read_source(ref)
     _, original = corpus.original(ref.doc_id)
     with PDF_LOCK, pymupdf.open(stream=original, filetype="pdf") as document:
@@ -387,7 +396,7 @@ def read_operand(corpus, ref, metric, period, *, other=None, requested_currency=
         if is_market_metric(metric):
             return market_operand(corpus, document, page, citation, metric, period, other,
                                   requested_currency, requested_scale, notes, note_citation)
-        selected = table_operands(page, period, metric, citation, notes, note_citation)
+        selected = table_operands(page, period, metric, citation, notes, note_citation, tables)
         if selected:
             return selected
         selected = balance_operand(page, period, other, metric, citation, notes, note_citation)
