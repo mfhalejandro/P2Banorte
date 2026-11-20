@@ -8,13 +8,46 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.corpus import Citation, Corpus
-from apps.api.finance import Abstain, Operand, Unit, calculate, decimal_from_source, display
+from apps.api.finance import Abstain, Operand, PERIOD, Unit, calculate, decimal_from_source, display, local_period
 from apps.api.financial_agent import LocalToolDouble, ToolCall, parse_intent, requires_financial_tools
+from apps.api.financial_evidence import balance_operand
 from apps.api.main import create_app
 from fixtures import example, report
 
 DIFF = "Compara la utilidad neta de Grupo Faro entre 3T24 y 3T25"
 CHANGE = "Calcula la variación porcentual de la utilidad neta de Grupo Faro entre 3T24 y 3T25"
+
+
+@pytest.mark.parametrize(("question", "expected"), [
+    ("¿Qué porcentaje creció la utilidad neta de Grupo Faro de los primeros seis meses de 2023 "
+     "a los primeros seis meses de 2024?", ("6M23", "6M24", "percent_change")),
+    ("¿Cuántos puntos porcentuales avanzó el rendimiento sobre los activos de Grupo Faro "
+     "del primer al tercer trimestre de 2024?", ("1T24", "3T24", "difference")),
+    ("Del acumulado a junio de 2024, ¿qué porcentaje de la utilidad neta corresponde al primer trimestre "
+     "de ese mismo año?", ("6M24", "1T24", "participation")),
+])
+def test_operational_paraphrases_have_typed_periods(question, expected):
+    intent = parse_intent(question)
+    assert (intent.base.label, intent.current.label, intent.operation) == expected
+
+
+def test_balance_geometry_requires_the_original_row_and_two_unambiguous_periods():
+    periods = [local_period(PERIOD.fullmatch(label)) for label in ("2T24", "3T24")]
+    cite = Citation(doc_id="a" * 64, filename="fixture.pdf", pdf_page=1, evidence_id="fixture", snippet="")
+    with pymupdf.open() as pdf:
+        page = pdf.new_page()
+        for x, y, value in (
+            (40, 50, "Grupo Acuario consolidado con subsidiarias - Estado de situacion financiera"),
+            (40, 70, "(Millones de pesos)"), (280, 70, "2T 24"), (370, 70, "3T 24"),
+            (40, 88, "Activo Total"), (280, 88, "1,050,100"), (370, 88, "1,080,100"),
+            (475, 88, "2.86%"), (40, 103, "Pasivo Total"), (280, 103, "850,200"), (370, 103, "880,200"),
+        ):
+            page.insert_text((x, y), value, fontsize=9)
+        first = balance_operand(page, *periods, "activo total", cite, "", None)
+        assert first.original == "1,050,100" and first.entity == "Grupo Acuario"
+        assert first.citation.snippet == "Activo Total | 2T24 | 1,050,100"
+        page.insert_text((440, 70), "3T 24", fontsize=9)
+        assert balance_operand(page, *periods, "activo total", cite, "", None) is None
 
 
 @pytest.fixture

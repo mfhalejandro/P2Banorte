@@ -88,28 +88,33 @@ def check_stock_sum(operation: Operation, metric: str):
     stocks = {"activo total", "activos totales", "total activo", "total activos", "pasivo total",
               "total pasivo", "capital contable", "saldo cierre", "capitalizacion mercado"}
     if operation == "sum" and name in stocks:
-        raise Abstain("La magnitud de stock es un saldo a una fecha de corte y no es aditiva entre periodos.")
+        raise Abstain("La magnitud de stock es un saldo a una fecha de corte y no es aditiva entre periodos. "
+                      "Sumar dos saldos de cierre no produce un saldo anual.")
+
+
+def check_periods(operation: Operation, base: Period, current: Period):
+    if operation == "participation":
+        if not (base.kind == "ytd" and current.kind == "quarter" and base.year == current.year
+                and base.end - base.months <= current.end - current.months < current.end <= base.end):
+            raise Abstain(f"El trimestre no está incluido en el acumulado solicitado ({current.label} frente a {base.label}).")
+    elif (base.kind, base.months) != (current.kind, current.months):
+        raise Abstain("Los periodos tienen distinto tipo o duración, por ejemplo trimestre frente a acumulado.")
 
 
 def calculate(operation: Operation, base: Operand, current: Operand) -> tuple[Decimal, str, str]:
     check_stock_sum(operation, current.metric)
+    check_periods(operation, base.period, current.period)
     if normalize(base.metric) != normalize(current.metric) or normalize(base.entity) != normalize(current.entity):
         raise Abstain("Las cifras corresponden a indicadores o entidades distintos.")
     if operation == "participation":
         flows = {"utilidad neta", "ingresos intereses", "ingresos totales", "gastos operacion"}
         if not (base.additive and current.additive) and normalize(current.metric) not in flows:
             raise Abstain("La participación temporal exige una magnitud de flujo aditiva, como la utilidad neta.")
-        whole, part = base.period, current.period
-        if (whole.kind != "ytd" or part.kind != "quarter" or whole.year != part.year
-                or not whole.end - whole.months <= part.end - part.months < part.end <= whole.end):
-            raise Abstain("El trimestre no está incluido en el acumulado solicitado.")
         scope = lambda item: (item.citation.doc_id, item.citation.pdf_page, item.citation.evidence_id.rsplit(":", 2)[0])
         if (scope(base) != scope(current) or base.unit.name != "moneda"
                 or not all(re.search(r":\d+:\d+:\d+:\d+$", item.citation.evidence_id)
                            for item in (base, current))):
             raise Abstain("La participación exige cifras monetarias de la misma tabla y una base común.")
-    elif (base.period.kind, base.period.months) != (current.period.kind, current.period.months):
-        raise Abstain("Los periodos tienen distinto tipo o duración, por ejemplo trimestre frente a acumulado.")
     if (base.unit.name, base.unit.currency) != (current.unit.name, current.unit.currency):
         currency_a, currency_b = base.unit.currency or "", current.unit.currency or ""
         if ":" in currency_a and ":" in currency_b and currency_a.split(":", 1)[0] == currency_b.split(":", 1)[0]:

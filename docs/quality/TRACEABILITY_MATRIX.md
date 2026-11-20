@@ -122,3 +122,14 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | T-13 · Regresión conocida | Las variantes local e híbrida usaron el mismo corpus, índice y versión. B preservó 13/13 PASS de A en la batería visual. G, J y K también se reejecutaron. | VERIFIED en las baterías citadas. |
 
 [Comparación por ID, citas y latencias](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#rescate-determinista-local-en-la-aplicación-web)
+
+### Generalización del híbrido determinista
+
+| Criterio | Evidencia | Resultado |
+|---|---|---|
+| SPEC-001 y SPEC-002-AC-01/02/03/05 | L pasa de 6/25 a 25/25 con 42/42 citas cotejadas. La demo de 24 PDF abre los PNG de L02 y L15 desde Chromium. | VERIFIED en L. |
+| T-05/T-07/T-11 | R01–R14, pruebas de periodos, sumas de stock, divisas y perímetro. Bloqueo de salida, once negativos M/L y verificación original de celdas. | VERIFIED para los cálculos emitidos y los rechazos acreditados. Cobertura abierta PARTIAL. |
+| T-13 | Visual 20/20, G 22/22, J 15/20 y K 11/12 sin pérdidas de veredictos frente al registro anterior. Una pasada congelada de M obtuvo 5 PASS, 3 PARTIAL y 4 FAIL. | Regresiones VERIFIED. Generalización PARTIAL. |
+| SPEC-002-AC-06 | Pruebas locales con alcance externo bloqueado. Cero llamadas, tokens y costo. | NOT RUN en este trabajo. |
+
+[Diagnóstico, comparaciones y límites](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#generalización-del-híbrido-determinista--línea-base-2fa82a6)

@@ -24,7 +24,8 @@ FOREIGN_NAME = re.compile(
     re.I,
 )
 # Una expresión vecina puede ser parte de la frase, no un gentilicio.
-CONNECTORS = {"entre", "del", "de", "por", "para", "con", "desde", "hasta", "al", "respecto", "nominales", "corrientes", "y", "o", "como", "publicados", "indicados", "originales"}
+CONNECTORS = {"entre", "del", "de", "por", "para", "con", "desde", "hasta", "al", "respecto", "nominales",
+              "corrientes", "y", "o", "como", "publicados", "indicados", "originales", "adicionales"}
 CODE_REQUIREMENT = re.compile(MARKER + r"(?:\(?)([a-z]{3})\b", re.I)
 EXPLICIT_UNIT = re.compile(
     r"\b(?:moneda\s*[:=]\s*|(?:en|a)\s+(?:moneda|exclusivamente|unicamente|solo)\s+)([^\W\d_]+)", re.I,

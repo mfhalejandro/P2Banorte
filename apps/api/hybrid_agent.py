@@ -18,11 +18,12 @@ from .corpus import (
     PDF_LOCK, Citation, SearchRequest, definition_topic, definition_under_heading,
     documentary_query, explanation_terms, indirect_definition, list_under_heading, page_lines, policy_scope, terms,
 )
+from .currency_request import verify_currency_request
 from .deepseek_config import USD_NANO
 from .deepseek_wire import UsageTotals
 from .hybrid_planner import DeterministicPlanner, FinanceConstraints, HybridPlanner, Plan
-from .finance import Abstain, check_stock_sum, normalize
-from .financial_agent import Trace, parse_intent, requires_financial_tools
+from .finance import Abstain, PERIOD, check_stock_sum, normalize
+from .financial_agent import CURRENCY, ENTITY_NAME, METRIC, Trace, normalize_periods, parse_intent, requires_financial_tools
 
 
 MODE = "híbrido experimental"
@@ -39,6 +40,7 @@ TOPIC_ALIASES = {
     "coeficiente cobertura liquidez": ("ccl", "activos", "liquidos", "salidas", "netas", "efectivo", "relacion"),
     "riesgo credito": ("perdida", "potencial", "pago", "contraparte", "acreditado"),
     "margen operativo": ("proporcion", "ingresos", "gastos", "operativos"),
+    "portafolio credito": ("segmentamos",),
 }
 RESTRICTION = re.compile(
     r"\b(?:solo|unicamente|exclusiv\w*|excepto|sin incluir|salvo|anteriores?|posteriores?|"
@@ -54,6 +56,13 @@ SECOND_METRIC = re.compile(
     r"| en las mismas fechas| en los mismos trimestres)?$"
 )
 EXTRA_FINANCIAL = re.compile(r"[.?!;]\s+(?=(?:[¿¡]\s*)?(?:dame|indica|muestra|calcula|estima|adem[aá]s|tambi[eé]n)\b)", re.I)
+INDEPENDENT_OPERATIONS = re.compile(r"\bprimero[, :]\s*(.+?)(?:[;.]\s*|\s+)segundo[, :]\s*(.+)", re.I)
+PARALLEL_METRICS = re.compile(r"\btanto\s+(?:el\s+|la\s+)?([^,.;?]+?)\s+como\s+(?:el\s+|la\s+)?", re.I)
+COORDINATED_FINANCE = re.compile(
+    r"(?:,?\s+y\s+(?:por (?:separado|otro lado),?\s+)?|[;]\s*)(?="
+    r"(?:calcula|muestra|dame|indica|estima)\b|(?:el|la)\s+(?:cambio|variaci[oó]n|movimiento|diferencia|crecimiento)\b)",
+    re.I,
+)
 DEFINITION_VERB = re.compile(
     r"\b(?:es (?:la|el|una|un) |se (?:define|determina|calcula|refiere) |consiste |"
     r"(?:permite )?cuantifica(?:r)? .{0,95}\b(?:relacion|mediante|traves)\b)"
@@ -89,13 +98,26 @@ class DocumentNeed(BaseModel):
 
 
 # Patrones de evidencia, aplicados a cualquier entidad y fuente elegible.
-REPORT_YEAR = re.compile(r"\b(?:estados financieros|informe anual|reporte anual) (?:de |del )?(20\d{2})\b")
+REPORT_YEAR = re.compile(
+    r"\b(?:estados financieros|informe anual|reporte anual|(?:politicas|capitulo|apartado)(?: de)? liquidez)"
+    r" (?:de |del )?(20\d{2})\b"
+)
 FREQUENCY = ("mensual", "semanal", "trimestral", "anual", "diari")
 PERSONS = ("cpr", "consejo", "directivo", "administracion", "grupo")
+PORTFOLIO = r"\b(?:(?:segment\w*|divid\w*|separ\w*)\b.{0,80}\bportafolio|segmentos?\b.{0,80}\bcredito)\b"
+ORIGINATION = r"\b(?:control\w*|mitigante\w*|verific\w*|valid\w*)\b.{0,95}\boriginacion\b"
+LIQUIDITY_TOOLS = r"\b(?:herramientas|medidas|metodologias)\b.{0,70}\b(?:gestion|contingencia|operativas)\b"
+REPORTING_POLICY = r"\b(?:informar|informacion|revelacion|divulgacion)\b.{0,85}\b(?:consejo|autoridades)\b"
+SCOPE_QUESTION = re.compile(
+    r"\b(?:se pueden? (?:atribuir|aplicar)|puedo concluir|es exhaustiv[oa]|es suficiente para afirmar|"
+    r"(?:demuestra|acredita|prueba de que)\b.{0,45}\b(?:todas?|cada)|"
+    r"(?:subsidiarias|filiales)\b.{0,45}\bmism[oa]s?\b)"
+)
 OPEN_FRAMES = (
-    (r"\b(?:segment\w*|segmentado)\b.*\bportafolio\b|\bsegmentos?\b.*\bcredito\b",
-     "portafolio credito", (("minorista",), ("mayorista",), ("segment",)), r"\bsegment\w* [^:]{0,55}portafolio[^:]{0,20}:"),
-    (r"\b(?:control\w*|mitigante\w*)\b.*\boriginacion\b",
+    (PORTFOLIO,
+     "portafolio credito", (("minorista",), ("mayorista",), ("segmentamos", "segmenta", "segmentacion")),
+     r"\b(?:para fines de gestion del riesgo (?:de )?credito )?segment\w* [^:]{0,55}portafolio[^:]{0,20}:"),
+    (ORIGINATION,
      "originacion mitigantes", (("originacion",), ("mitigante", "control")), r"\boriginacion\b"),
     (r"\b(?:frecuencia|a quien se informa|semanalmente|trimestralmente)\b",
      "liquidez reportes", (FREQUENCY, PERSONS), None),
@@ -123,16 +145,42 @@ def document_needs(question):
                   if re.search(rf"\b{scope}\b", text)), None)
     if scope is None and re.search(r"\b(?:informe|documento) ficticio\b", text):
         scope = "ficticio"
-    report = "financial" if "estados financieros" in text else (
+    report = "financial" if "estados financieros" in text or (year_match and "liquidez" in year_match[0]) else (
         "annual" if re.search(r"\b(?:informe|reporte) anual\b", text) else None
     )
-    scope_question = bool(re.search(r"\b(?:se pueden? (?:atribuir|aplicar)|puedo concluir|es exhaustiv[oa])\b", text))
+    scope_question = bool(SCOPE_QUESTION.search(text))
     if (re.search(r"\b(?:banco|grupo|filial\w*|subsidiaria\w*|anexo)\b", text) and not scope_question
             or re.search(r"\b(?:todas?|exhaustiv\w*)\b", text) and not scope_question):
         return []
     if re.search(r"\b(?:en|segun) (?:los |el )?(?:informes?|reportes?|documentos?)\b", text):
         if not (scope or report or re.search(r"\bdisponibles\b", text)):
             return []
+    keys = set(terms(text))
+    if scope_question and "politicas" in keys and ("liquidez" in keys or scope == "tenedora"):
+        topic = "políticas de liquidez" if "liquidez" in keys else "políticas de la Tenedora"
+        return [DocumentNeed(topic=topic, kind="scope", scope=scope, year=year, report=report,
+                             current_report=scope == "tenedora" and year is None)]
+    if ({"acreditado", "contraparte"} & keys and {"incumplimiento", "pago", "quebranto"} & keys
+            and {"riesgo", "concepto"} & keys and re.search(r"\b(?:que riesgo|como (?:llama|denomina))\b", text)):
+        return [DocumentNeed(topic="riesgo de crédito", kind="definition", scope=scope, year=year, report=report)]
+    if re.search(PORTFOLIO, text) and re.search(ORIGINATION, text) and (
+        re.search(r"\b(?:credito|creditici\w*)\b", text)
+    ):
+        return [DocumentNeed(topic=topic, kind="passage", scope=scope, year=year, report=report,
+                             facets=facets, anchor=anchor) for _, topic, facets, anchor in OPEN_FRAMES[:2]]
+    if {"politica", "liquidez"} <= keys and re.search(REPORTING_POLICY, text) and re.search(LIQUIDITY_TOOLS, text):
+        return [
+            DocumentNeed(topic="políticas de liquidez", kind="list", scope=scope or "tenedora", year=year, report=report,
+                         facets=(("consejo",), ("autoridades",)), current_report=year is None),
+            DocumentNeed(topic="riesgo de liquidez", kind="passage", scope=scope or "tenedora", year=year, report=report,
+                         facets=(("brechas",), ("pruebas",), ("contingencia",)), current_report=year is None),
+        ]
+    if "contingencia" in keys and re.search(LIQUIDITY_TOOLS, text) and (
+        "liquidez" in keys or "balance" in keys or scope == "tenedora"
+    ):
+        return [DocumentNeed(topic="riesgo de liquidez", kind="passage", scope=scope, year=year, report=report,
+                             facets=(("brechas", "indicador"), ("pruebas",), ("contingencia",)),
+                             current_report=bool(scope and year is None))]
     parts = [part for part in DOC_SPLIT.split(content) if part.strip(" ¿?")]
     if not 1 <= len(parts) <= 2:
         return []
@@ -146,8 +194,6 @@ def document_needs(question):
         topic = definition_topic(cleaned.rstrip(" ,"))
         facets = ()
         anchor = None
-        if scope_question and {"politicas", "liquidez"} <= set(terms(text)):
-            return [DocumentNeed(topic="políticas de liquidez", kind="scope", scope=scope, year=year, report=report)]
         if topic:
             kind = "definition"
         elif INDIRECT.search(cleaned) or indirect_definition(part):
@@ -217,6 +263,60 @@ def financial_need(question, primary):
                    additional_difference=False, percentage_points=False, definition_check=False)
 
 
+def split_financial_operations(question):
+    """Separar métricas coordinadas sin aplicar la unidad o los periodos de una a la otra."""
+    content = documentary_query(question)
+    # Exigir una operación reconocible y exactamente dos métricas distintas.
+    metrics = list(METRIC.finditer(content))
+    if len(metrics) != 2 or metrics[0].lastgroup == metrics[1].lastgroup:
+        return None
+    # La unidad monetaria puede tener alcance global. Conservar el flujo
+    # original si no se puede asignar a un apartado sin ambigüedad.
+    if CURRENCY.search(content):
+        return None
+    try:
+        verify_currency_request(content)
+    except Abstain:
+        return None
+    if explicit := INDEPENDENT_OPERATIONS.search(content):
+        if METRIC.search(content[:explicit.start()]) or PERIOD.search(content[:explicit.start()]):
+            return None
+        first, second = explicit.groups()
+    elif (paired := PARALLEL_METRICS.search(content)) and (
+        paired[1].strip().lower() == metrics[0][0].lower()
+        and paired.end() == metrics[1].start()
+    ):
+        shared = content[:paired.start()] + "{metric}" + content[metrics[1].end():]
+        first, second = (shared.replace("{metric}", metric[0]) for metric in metrics)
+    else:
+        boundaries = [match for match in COORDINATED_FINANCE.finditer(content)
+                      if metrics[0].end() <= match.start() <= metrics[1].start()]
+        if len(boundaries) != 1:
+            return None
+        cut = boundaries[0]
+        first, second = content[:cut.start()], content[cut.end():]
+    first_periods = list(PERIOD.finditer(normalize_periods(first)))
+    if len(first_periods) == 2 and not PERIOD.search(normalize_periods(second)):
+        # El segundo apartado sin fechas usa el par común previamente indicado.
+        # Ante una referencia temporal propia que el analizador no reconoce, abstenerse.
+        if re.search(r"\b(?:19\d{2}|20\d{2}|trimestres?|acumulado|meses)\b", second, re.I):
+            return None
+        p, q = (match[0] for match in first_periods)
+        second = f"Entre {p} y {q}, {second}"
+    entities = list(ENTITY_NAME.finditer(content))
+    if len(entities) == 1:
+        entity = "GFNorte" if entities[0]["known"] else entities[0]["other"]
+        if not ENTITY_NAME.search(first):
+            first = f"{first.rstrip('. ')}. Entidad: de {entity}."
+        if not ENTITY_NAME.search(second):
+            second = f"{second.rstrip('. ')}. Entidad: de {entity}."
+    # Si hay fechas específicas sin normalizar o la cláusula es ambigua,
+    # no se genera una operación derivada.
+    if not all(requires_financial_tools(part) for part in (first, second)):
+        return None
+    return first, second
+
+
 def doc_support(need, snippet):
     wanted = set(need.keywords)
     text = plain(snippet)
@@ -246,7 +346,7 @@ def doc_support(need, snippet):
             colon and terms(heading) == list(need.keywords) and subject == [acronym]
         )
     if need.kind in {"list", "scope"}:
-        return "•" in snippet and (need.kind != "scope" or not need.scope or need.scope in observed)
+        return "•" in snippet and (need.kind != "scope" or need.scope != "tenedora" or "tenedora" in observed)
     return len(snippet) >= 40 and ("." in snippet or bool(need.facets))
 
 
@@ -413,14 +513,20 @@ class HybridAgent:
         reply = base
         try:
             async with asyncio.timeout_at(budget.deadline):
-                finance = requires_financial_tools(question)
-                base = await (self.financial if finance else self.documentary).answer(question)
+                operations = split_financial_operations(question)
+                primary = operations[0] if operations else question
+                finance = operations is not None or requires_financial_tools(question)
+                primary_trace = Trace() if operations else None
+                if primary_trace is not None:
+                    base = await self.financial.answer(primary, trace=primary_trace)
+                else:
+                    base = await (self.financial if finance else self.documentary).answer(primary)
                 reply = base
                 budget.tools.extend(base.tools_used)
                 original_time = perf_counter()
                 stage = "protected"
                 if finance:
-                    reply, stage = await self.finance(question, base, budget, totals)
+                    reply, stage = await self.finance(question, base, budget, totals, operations, primary_trace)
                 else:
                     reply, stage = await self.documents(question, base, budget, totals)
         except (TimeoutError, ProviderUnavailable, KeyError, OSError, sqlite3.Error, RuntimeError):
@@ -488,13 +594,23 @@ class HybridAgent:
         note = f"Quedó pendiente verificar {subject}."
         return base.model_copy(update={"answer": f"{base.answer} {note}", "warnings": [*base.warnings, note]})
 
-    async def finance(self, question, base, budget, totals):
+    async def finance(self, question, base, budget, totals, operations=None, primary_trace=None):
         try:
-            primary = parse_intent(question)
+            primary = parse_intent(operations[0] if operations else question)
             check_stock_sum(primary.operation, primary.metric)
         except Abstain:
             return base, "protected"
-        secondary = financial_need(question, primary)
+        if operations:
+            try:
+                secondary = parse_intent(operations[1])
+            except Abstain as exc:
+                return self.partial(base, str(exc)), "unverified"
+            if secondary.currencies or primary.currencies:
+                return self.partial(base, secondary.metric), "tool-budget"
+            if not secondary.entity and primary_trace.result:
+                secondary = replace(secondary, entity=primary_trace.result[0].entity)
+        else:
+            secondary = financial_need(question, primary)
         if base.status == "abstained":
             if primary.operation == "participation":
                 whole, part = primary.base, primary.current
@@ -574,7 +690,8 @@ class HybridAgent:
                    if base.status == "answered" and report_scope(need, cite.filename)
                    and doc_support(need, cite.snippet) and doc_support(need, base.answer)
                    and (need.kind != "scope" or "no acredita" in base.answer)}
-        slots = [{"slot": i, "tipo": need.kind, "tema": need.topic, "terms": need.permitted}
+        slots = [{"slot": i, "tipo": need.kind, "tema": need.topic, "terms": need.permitted,
+                  "aliases": list(TOPIC_ALIASES.get(normalize(need.topic), ()))}
                  for i, need in enumerate(needs) if i not in covered]
         if not slots:
             return base, "complete"
@@ -612,9 +729,8 @@ class HybridAgent:
                     refs = [*grouped[:3], *refs, *grouped[3:]]
                 expanded = set(search_terms) - set(need.keywords)
                 if expanded:
-                    guided = await budget.call("search_corpus", self.corpus.search_corpus,
-                                               SearchRequest(query=" ".join([*need.keywords, *sorted(expanded)]),
-                                                             documents=documents, top_k=4))
+                    guided = await budget.call("search_corpus", self.corpus.search_pages,
+                                               [need.keywords, tuple(expanded)], documents, 4)
                     # La formulación sugerida nunca elimina los primeros candidatos de la búsqueda original.
                     refs = [*refs[:2], *guided[:2], *refs[2:]]
                 pages = set()
@@ -635,8 +751,20 @@ class HybridAgent:
         if set(covered) == initial:
             return pending, "unverified" if stage == "planned" else stage
         citations = list({cite.evidence_id: cite for _, cite in sorted(covered.items())}.values())
-        parts = [("El pasaje delimita las políticas descritas y no acredita su aplicación a todas las entidades. "
-                  if needs[i].kind == "scope" else "") + cite.snippet for i, cite in sorted(covered.items())]
+        parts = []
+        for i, cite in sorted(covered.items()):
+            need = needs[i]
+            prefix = ""
+            if need.kind == "scope":
+                prefix = ("El pasaje identifica las políticas descritas. Por sí solo, no acredita que sean exhaustivas "
+                          "ni que se apliquen a todas las filiales. ")
+                if "liquidez" not in need.keywords:
+                    prefix += "Este es un ejemplo del alcance identificado en el documento. "
+            elif {"consejo", "autoridades"} <= {word for group in need.facets for word in group} and need.kind == "list":
+                prefix = "Políticas de divulgación: "
+            elif need.kind == "passage" and ("contingencia",) in need.facets:
+                prefix = "Medidas de gestión: "
+            parts.append(prefix + cite.snippet)
         parts = list(dict.fromkeys(parts))
         warnings = []
         if len(covered) != len(needs):

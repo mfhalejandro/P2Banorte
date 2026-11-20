@@ -532,3 +532,123 @@ La regresión de producción también pasó G01–G22 con 22 PASS, J01–J20 con
 Se activó `hybrid-experimental` en `p2banorte-api.service` sobre 8194, con alcance externo bloqueado, y Vite siguió en 5194. Chromium comprobó D05, F05 y S06 a través de esa web, incluyendo apertura real de las páginas 153 y 6 en los dos primeros casos. El log de la pasada A/B registra 20 eventos del híbrido y seis activaciones. La reversión reutiliza el servicio, el puerto y el mismo SQLite con `P2BANORTE_LOCAL_MODE=financial-local`. [Arranque y reversión](../../README.md#rescate-determinista-en-la-demo-web)
 
 El cierre adicional reprodujo 14/14 resultados financieros con 25/25 PNG e identidad de estado, respuesta, citas y pasos respecto del histórico. Pasaron 11/11 casos de aceptación, 28/28 de la ampliada y 10/10 de B01–B10. Los controles de integridad RCTF, PDF, SQLite y frontera Git pasaron.
+
+## Generalización del híbrido determinista · línea base 2fa82a6
+
+Fase I. Se ejecutaron L01–L25 por HTTP contra una API aislada con 24 PDF, SQLite de solo lectura, 2 CPU, 4 GiB y salida externa bloqueada. Se conservaron preguntas, respuestas, herramientas, latencia, citas y cabeceras en `/tmp/p2-generalization-2fa82a6/L-before.jsonl`. El delta de trabajo inicial se guardó en `before.patch`. Se cotejaron visualmente las páginas 29–30 del informe anual, 152–153 de los estados financieros 2025, 5–6 de 3T24 y 7 de 2T24. El oráculo M se congeló antes de editar producción. SHA-256 `23a3be505c81f3530a87127a06b83093189061501b2903636316ce0994bc27c4`.
+
+| ID | Antes | Rescate | Primera etapa observada |
+|---|---|---|---|
+| L01 | FAIL | Sí | El detector trata la definición inversa como pasaje genérico y exige palabras de la pregunta ausentes de la definición. |
+| L02 | FAIL | No | El detector retiene dos apartados en un solo tema y lo descarta por longitud. |
+| L03 | PASS | Sí | Se verifica la definición del CCL en la página 153. |
+| L04 | FAIL | No | No se representan por separado divulgación y gestión operativa. |
+| L05 | PARTIAL | Sí | Una ventana de tres oraciones acredita los planes pero omite las herramientas y añade frecuencias incidentales de 2024. |
+| L06 | PASS | Sí | Se acreditan las tres frecuencias de 2025 en la página 153. |
+| L07 | FAIL | No | El año de sección no se asocia al informe y el detector descarta la exhaustividad. |
+| L08 | FAIL | No | El detector descarta las subsidiarias antes de reconocer que son objeto de una pregunta de alcance. |
+| L09 | FAIL | No | La comparación nominal y el crecimiento relativo quedan en la ruta documental. |
+| L10 | FAIL | No | El incremento nominal queda en la ruta documental. |
+| L11 | FAIL | No | Se incorpora la segunda métrica al indicador de la primera. |
+| L12 | FAIL | No | La solicitud de dos tasas después de los periodos deja el indicador principal vacío. |
+| L13 | FAIL | No | No se identifica la comparación referida a dos monedas publicadas. |
+| L14 | FAIL | No | No se liga el primer trimestre a un año posterior en la frase y la operación indirecta queda en modo documental. |
+| L15 | FAIL | No | La diferencia de saldos queda en modo documental. Al forzar la intención, la tabla de activo también queda fuera de candidatos tempranos y el parser no acredita la fila del resumen. |
+| L16 | FAIL | No | El corte mensual y la relación parte/acumulado no se interpretan. |
+| L17 | FAIL | No | La diferencia en puntos porcentuales antes del verbo no se reconoce. |
+| L18 | FAIL | No | Cuatro periodos entran en una única intención. |
+| L19 | PARTIAL | No | La frase de propósito se toma como indicador y no se dispara la validación de stock. |
+| L20 | PARTIAL | No | La instrucción de asimilar periodos oculta la operación al enrutador. |
+| L21 | PASS | No | Se rechaza la entidad solicitada sin sustituirla. |
+| L22 | PASS | No | Se rechaza la moneda GBP. |
+| L23 | PASS | No | Se acredita la desconsolidación y se rechaza la comparación. |
+| L24 | PASS | No | Se abstiene sin inventar evidencia sobre 2042. |
+| L25 | PARTIAL | No | No se reconoce el rango enero-septiembre y se pide completar periodos ya especificados. |
+
+La línea base HTTP dio 6 PASS, 4 PARTIAL y 15 FAIL, con cuatro rescates activados. La clasificación parcial de L20 refleja una abstención segura por la ruta documental, sin diagnóstico financiero. La corrección se acota a construcción de intención, verificación de apartados y recuperación de evidencia dentro de P0 y SPEC-002.
+
+### Cambios del candidato y verificación L
+
+El analizador normaliza trimestres escritos, acumulados desde enero y referencias de año ligadas al contexto. En una solicitud compuesta inequívoca, cada apartado conserva sus periodos y operación. Cuando se omite la entidad de ambos apartados, el segundo usa la entidad acreditada en el primero. Obtiene sus propios operandos y no reutiliza cifras. La diferencia de tasas se expresa en puntos porcentuales y cada moneda se verifica en su propia fila.
+
+El rescate documental separa definición, política, medidas y alcance. Los términos de expansión provienen de alias admitidos para el apartado. La búsqueda conserva los candidatos iniciales y lee el PDF antes de aceptar cada pasaje. La lectura geométrica del balance se usa para filas fusionadas cuando el encabezado, la entidad, la consolidación, la leyenda y las columnas pueden comprobarse. El caso L20 conserva las cifras y citas disponibles y explica la duración incompatible sin pasar por la calculadora. L25 rechaza antes de buscar porque el trimestre queda fuera del acumulado.
+
+| ID | Antes → después | Apartado o evidencia verificada |
+|---|---|---|
+| L01 | FAIL → PASS | Definición, contraparte y garantías, informe anual p. 29. |
+| L02 | FAIL → PASS | Segmentos y controles, informe anual pp. 29–30. |
+| L03 | PASS → PASS | Relación de activos líquidos y salidas netas a 30 días, EEFF 2025 p. 153. |
+| L04 | FAIL → PASS | Política de divulgación y medidas de gestión, EEFF 2025 pp. 152–153. |
+| L05 | PARTIAL → PASS | Indicadores, brechas, estrés y contingencia, EEFF 2025 p. 153. |
+| L06 | PASS → PASS | Periodicidades mensual, semanal y trimestral, EEFF 2025 p. 153. |
+| L07 | FAIL → PASS | Alcance y ausencia de acreditación de exhaustividad, EEFF 2025 p. 152. |
+| L08 | FAIL → PASS | Alcance de la Tenedora. La pregunta no especifica sección y se cita como ejemplo la de riesgo de mercado, EEFF 2025 p. 149. |
+| L09 | FAIL → PASS | Utilidad neta acumulada, +3.089 millones y +7,85 %, 3T24 p. 5. |
+| L10 | FAIL → PASS | Utilidad trimestral, +970 millones, 3T24 p. 5. |
+| L11 | FAIL → PASS | Utilidad +1,57 % y ROE −0,4 pp, 3T24 pp. 5–6. |
+| L12 | FAIL → PASS | ROA +0,1 pp y ROE +1,4 pp, 3T24 p. 6. |
+| L13 | FAIL → PASS | Capitalización −101.624 millones de pesos y −8.461 millones de dólares, 2T24 p. 7. |
+| L14 | FAIL → PASS | Capitalización en USD, −27,51 %, 2T24 p. 7. |
+| L15 | FAIL → PASS | Variación del activo total, −14.981 millones, 3T24 p. 6. |
+| L16 | FAIL → PASS | Participación de 2T24 en 9M24, 33,01 %, 3T24 p. 5. |
+| L17 | FAIL → PASS | ROE +0,7 pp y notas comparables, 4T24 y 2T25 p. 6. |
+| L18 | FAIL → PASS | +7,85 % en 9M23–9M24 y +0,7 pp de ROE en 3T24–2T25. Cada operación tiene citas propias. |
+| L19 | PARTIAL → PASS | Rechazo de suma de saldos de cierre. |
+| L20 | PARTIAL → PASS | Rechazo por tipo y duración, con ambos operandos citados. |
+| L21 | PASS → PASS | Rechazo por entidad, sin sustitución. |
+| L22 | PASS → PASS | Rechazo de GBP sin conversión. |
+| L23 | PASS → PASS | Rechazo de ajuste de Bineo sin base común, con nota citada. |
+| L24 | PASS → PASS | Abstención sobre aprobación futura. |
+| L25 | PARTIAL → PASS | 4T25 queda fuera de 9M25. |
+
+La ejecución L final acreditó 25/25 respuestas, con 42/42 PNG accesibles, 42/42 citas textuales y 42/42 semánticamente válidas para los apartados evaluados. Se activaron 11 rescates y se verificaron todos los apartados rescatados. Las 7 abstenciones esperadas conservaron la causa y el respaldo aplicable. El SQLite se abrió con `mode=ro&immutable=1`. Se mantuvo la cuota de dos CPU, memoria máxima de 4 GiB, límite de 15 s y 24 herramientas por solicitud.
+
+| Medición L | Antes | Después |
+|---|---:|---:|
+| Mediana / P95 / máximo del POST, en segundos | 0,098 / 4,680 / 5,662 | 1,671 / 10,759 / 14,811 |
+| Herramientas totales / lecturas de fuente | 59 / 20 | 225 / 124 |
+| Pico de memoria de la unidad | 101,8 MiB | 147,9 MiB |
+| CPU acumulada de la unidad | 20,95 s | 88,52 s |
+| Llamadas a DeepSeek / tokens externos / USD | 0 / 0 / 0 | 0 / 0 / 0 |
+
+La medición de CPU incluye arranque, salud y render PNG. El POST excluye la apertura de imágenes. La diferencia de latencia acompaña la verificación de más apartados. L18 queda cerca del límite del agente. La demo real en 8194/5194 comprobó con Chromium L02 y L15 y abrió ambas páginas citadas. El smoke Chromium P0 pasó 6/6 usando el Chromium ya instalado.
+
+### Regresiones conocidas
+
+| Suite | PASS / PARTIAL / FAIL | Cambio frente al último registro |
+|---|---:|---|
+| Visual D/F/S | 20 / 0 / 0 | Conserva los 20 PASS y las 31 citas cotejadas. |
+| G01–G22 | 22 / 0 / 0 | Conserva los 22 PASS. |
+| J01–J20 | 15 / 3 / 2 | J01 y J10 pasan de FAIL a PASS. J05 pasa de PARTIAL a PASS. |
+| K01–K12 | 11 / 0 / 1 | Conserva los 11 PASS. K01 sigue pendiente. |
+| Robustez R01–R14 | 14 / 0 / 0 | Conserva ocho operaciones y seis abstenciones, con 25/25 PNG. |
+| Aceptación | 11 / 0 / 0 | Reejecutada en financial-local. |
+| Ampliada | 28 / 0 / 0 | Reejecutada en financial-local. |
+| B01–B10 | 10 / 0 / 0 | Reejecutada en financial-local. |
+
+Se cotejaron los veredictos G/J/K con los JSONL del rescate determinista anterior. Los cinco J incompletos o fallidos siguen concentrados en definiciones compuestas, selección de ejercicio, alcance de objetivos y comparación sin monedas explícitas. K01 sigue fallando al solicitar los componentes de una definición por una paráfrasis de incumplimiento. Las 108 pruebas Python y 5 subpruebas pasaron. Una corrida intermedia descubrió que el rechazo temprano de duración estaba suprimiendo las citas de operandos válidos. El candidato final restaura esas citas e impide la llamada de cálculo.
+
+### Exploración M01–M12
+
+M se definió y cotejó antes de editar el código. Se comprobó su SHA-256 antes de ejecutar una sola pasada sobre el candidato congelado. SHA-256 del diff de producción respecto de `2fa82a6`: `f3933ada90de04705316f4d5be9b876fd6cb6998618e7f10001091e11f38930e`. M se usó para medir el candidato. No se midió una línea base M y los resultados no cuantifican una mejora sobre preguntas nuevas.
+
+| ID | Veredicto | Resultado |
+|---|---|---|
+| M01 | PASS | Definición inversa de riesgo de crédito, informe anual p. 29. |
+| M02 | FAIL | Detectó dos apartados, pero conservó verbos de presentación en ambos temas. No acreditó metodologías ni destinatario mensual. |
+| M03 | PASS | Políticas de la Tenedora sin extrapolar a cada subsidiaria, EEFF 2025 p. 152. |
+| M04 | PASS | Diferencia absoluta entre acumulados a septiembre, +3.089 millones de pesos, 3T24 p. 5. |
+| M05 | FAIL | El segmento de base «si tomo» quedó incorporado al nombre de la entidad. No logró acreditar la comparación en USD. |
+| M06 | FAIL | No separó la cláusula introducida por «y, por otro lado» y trató las fechas como una sola comparación. |
+| M07 | PASS | 33,53 % de participación de 3T24 en 9M24, 3T24 p. 5. |
+| M08 | FAIL | El complemento «entre los cierres» quedó unido a la entidad e impidió aceptar las celdas del balance. |
+| M09 | PARTIAL | Se abstuvo con seguridad. El ordinal sin la palabra trimestre dejó incompleto el primer periodo y faltó justificar la no aditividad. |
+| M10 | PARTIAL | Se abstuvo por la ruta documental. Faltó reconocer la operación nominal y explicar el rechazo en JPY. |
+| M11 | PASS | Rechazo por duración incompatible sin cálculo, con cifras citadas en 3T24 p. 5. |
+| M12 | PARTIAL | Se abstuvo sin cálculo. Confundió el prefijo de fechas con el indicador y no citó la advertencia de perímetro. |
+
+M obtuvo **5 PASS, 3 PARTIAL y 4 FAIL**. Dos de tres rescates completaron el apartado. Las 8 citas emitidas abrieron el PNG y se comprobaron textual y semánticamente. Ninguna abstención negativa se convirtió en cálculo. La mediana, P95 por rango más próximo y máximo del POST fueron 1,261, 6,277 y 6,277 s. En 12 observaciones el P95 coincide con el máximo. Hubo 76 herramientas y 44 lecturas de fuente. La unidad consumió 27,40 s de CPU durante M y llegó a un pico acumulado de 279,1 MiB, incluyendo las regresiones previas. El consumo externo de M fue cero.
+
+**Veredicto.** Generalización PARTIAL. L y J evidencian mejor cobertura de familias conocidas, mientras que M muestra carencias en delimitación de cláusulas, periodos y entidades. Precisión financiera VERIFIED para las operaciones emitidas y contrastadas. La cobertura financiera abierta sigue PARTIAL. Regresiones VERIFIED para las suites citadas. DeepSeek NOT RUN en este trabajo.
+
+Reproducción local. En `/tmp/p2-generalization-2fa82a6/` quedaron las entradas literales, el oráculo M congelado, el arranque de SQLite de solo lectura `bench_app.py`, el ejecutor HTTP `run_cases.py`, los calificadores y los JSONL. La comparación L usa `L-before.jsonl` y `L-final.jsonl`. Las suites conocidas usan `known-final.jsonl`, `control-final.jsonl` y `robust.jsonl`. M usa `M-final.jsonl` y `M-verdicts.jsonl`. Los archivos se mantienen en el área local de evaluación. Para iniciar la demo o revertir a financial-local se usa el mismo bloque de arranque del README. [Arranque y reversión](../../README.md#rescate-determinista-en-la-demo-web)

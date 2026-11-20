@@ -186,3 +186,11 @@ Se reiniciaron p2banorte-api.service y p2banorte-web.service con systemctl --use
 ## 2026-11-20T22:28:17+01:00 · Rescate local en la demo web
 
 Codex verificó la salida bloqueada y activó hybrid-experimental con el planificador determinista en p2banorte-api.service. La web en 5194 comprobó D05, F05 y S06. En A/B, 13 PASS locales se conservaron y B obtuvo 20/20, 31/31 citas pertinentes, seis rescates completos y cero consumo externo. Pasaron 103 pruebas Python, 5 subcasos, 6 Chromium, 14/14 financieros, 11/11 de aceptación, 28/28 ampliada y 10/10 B. Los RCTF, PDF, SQLite y ledger original quedaron intactos. [Auditoría](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#rescate-determinista-local-en-la-aplicación-web)
+
+## 2026-11-20T22:39:51+01:00 · Reinicio de la API de la demo
+
+Se ejecutó `systemctl --user restart p2banorte-api.service` y se confirmó el cambio de PID. La API directa en 8194 y mediante Vite en 5194 informó estado ok, 24 documentos, planificador determinista y salida externa bloqueada. El frontend respondió HTTP 200. El modo y el alcance declarados en `.env` coincidían con los de la unidad, que conserva sus variables explícitas.
+
+## 2026-11-20T23:22:56+01:00 · Diagnóstico y generalización del híbrido determinista
+
+Codex reanudó en `2fa82a6` y conservó la edición de bitácora que ya estaba en el árbol. Ejecutó L por HTTP antes del cambio, cotejó los PDF y congeló M. Las instancias temporales usaron `uvicorn bench_app:app`, SQLite de solo lectura, dos CPU, 4 GiB y solo loopback. El candidato final dio 25/25 en L y 5/12 en M. Pasaron las regresiones publicadas en el informe, 108 pruebas Python y los 6 smoke de Chromium. La demo en 8194/5194 comprobó L02 y L15 con PNG originales. No se ejecutó DeepSeek. [Informe](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#generalización-del-híbrido-determinista--línea-base-2fa82a6)

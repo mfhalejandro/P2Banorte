@@ -51,7 +51,11 @@ class DeterministicPlanner:
     """Seleccionar los apartados pendientes en el orden que verificó el backend."""
 
     async def plan(self, question, slots, totals):
-        return Plan(subquestions=[Step(slot=entry["slot"], search_terms=[]) for entry in slots])
+        return Plan(subquestions=[
+            Step(slot=entry["slot"], search_terms=[
+                word for word in entry.get("aliases", ()) if word in entry["terms"]
+            ][:4]) for entry in slots
+        ])
 
 
 SYSTEM = (

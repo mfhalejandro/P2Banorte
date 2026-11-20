@@ -7,7 +7,7 @@ import pymupdf
 
 from .corpus import Corpus, PDF_LOCK, SourceRef, terms
 from .finance import Abstain, Operand, PERIOD, Period, Unit, decimal_from_source, local_period, normalize
-from .market_table import MARKET_ROW, is_market_metric, market_cells
+from .market_table import MARKET_ROW, is_market_metric, market_cells, numeric_cell, period_columns, word_rows
 
 ENTITY = re.compile(r"(?im)^\s*(?:tabla comparativa\s*[-–]\s*)?(?:entidad\s*:\s*([^\n|]+)|((?:grupo|banco)\s+[^\n|]+?)\s+(?:no\s+)?consolidad[oa]\b|(GFNorte)\s*[-–,])")
 BASIS = re.compile(r"\b(?:no\s+)?consolidad[oa](?:\s+con\s+subsidiarias)?\b", re.I)
@@ -19,6 +19,13 @@ ADDITIVE = re.compile(r"(?im)^magnitud aditiva\s*:\s*([^\n|]+)")
 TABULAR_LINES = re.compile(r"\s+")
 INDICATORS = re.compile(r"indicadores financieros\s+([^\n|]+)", re.I)
 ROW_NOTE = re.compile(r"\s+\((\d{1,2})\)\s*$")
+BALANCE_TITLE = re.compile(r"estadodesituacionfinanciera|estadosituacionfinanciera|balancegeneral")
+BALANCE_ROWS = {"activo total", "capital contable", "pasivo total"}
+
+
+def balance_heading(text):
+    return bool(BALANCE_TITLE.search(normalize(text).replace(" ", "")) or
+                re.search(r"estado\s+de\s+situaci\s*[oó]\s*n\s+financiera", text, re.I))
 
 
 class UnverifiedBasis(Abstain):
@@ -53,8 +60,13 @@ def find_candidates(corpus: Corpus, metric: str, period: Period, other: Period |
             SELECT doc, page, body FROM chunks WHERE chunks MATCH ?
             ORDER BY bm25(chunks) ASC, doc, page, fragment LIMIT 400
         """, ('("informacion" AND "accion" AND "grupo") OR "bursatiles"',)).fetchall() if is_market_metric(metric) else []
+        balance_pages = db.execute("""
+            SELECT doc, page, body FROM chunks WHERE chunks MATCH ?
+            ORDER BY bm25(chunks), doc, page, fragment LIMIT 1000
+        """, ('NEAR("estado" "financiera", 8) OR "balance general"',)).fetchall() if normalize(metric) in BALANCE_ROWS else []
     pages = {}
     header_scores = {}
+    balance_headers = set()
     for row in headings:
         codes = {local_period(m) for m in PERIOD.finditer(row["body"])}
         if period in codes:
@@ -71,13 +83,23 @@ def find_candidates(corpus: Corpus, metric: str, period: Period, other: Period |
         if period in codes:
             key = (row["doc"], row["page"])
             header_scores[key] = max(header_scores.get(key, 0), 4 + int(other in codes))
+    for row in balance_pages:
+        codes = {local_period(m) for m in PERIOD.finditer(row["body"])}
+        if {period, other} <= codes and balance_heading(row["body"]):
+            key = row["doc"], row["page"]
+            header_scores[key] = max(header_scores.get(key, 0), 6)
+            balance_headers.add(key)
     for row in rows:
         key = (row["doc"], row["page"])
         codes = {local_period(m) for m in PERIOD.finditer(row["body"])}
         if period not in codes and not header_scores.get(key):
             continue
         score = header_scores.get(key, 0)
-        if key not in pages:
+        if key in balance_headers and re.search(
+            rf"\b{re.escape(normalize(metric))}\s+\d", row["body"].casefold()
+        ):
+            score += 2
+        if key not in pages or score > pages[key][0]:
             pages[key] = score, SourceRef(doc_id=key[0], pdf_page=key[1], fragment=row["fragment"])
     return [ref for _, ref in sorted(pages.values(), key=lambda item: -item[0])][:8]
 
@@ -220,6 +242,54 @@ def table_operands(page, period, metric, citation, notes, note_citation):
     return candidates[0] if candidates else None
 
 
+def balance_operand(page, period, other, metric, citation, notes, note_citation):
+    """Recuperar una fila fusionada en el extractor tabular usando sus coordenadas."""
+    if normalize(metric) not in BALANCE_ROWS or other is None:
+        return None
+    rows = word_rows(page)
+    lines = [" ".join(word[4] for word in row) for row in rows]
+    candidates = []
+    for start, title in enumerate(lines):
+        if not balance_heading(title):
+            continue
+        context = "\n".join(lines[start:start + 5])
+        # Corregir espacios dentro de términos del encabezado antes de
+        # comprobar la entidad, la consolidación y la leyenda monetaria.
+        for token in ("GFNorte", "consolidado", "consolidada", "con", "millones", "subsidiarias"):
+            context = re.sub(r"\b" + r"[^\S\n]*".join(token) + r"\b", token, context, flags=re.I)
+        if not ENTITY.search(context) or not CURRENCY.search(context):
+            continue
+        for header in range(start, min(start + 5, len(rows))):
+            columns = period_columns(rows[header], lines[header])
+            positions = [i for i, (label, _) in enumerate(columns) if label == period]
+            if len(positions) != 1 or sum(label == other for label, _ in columns) != 1:
+                continue
+            for line in range(header + 1, min(header + 25, len(rows))):
+                if len(period_columns(rows[line], lines[line])) >= 2:
+                    # Permitir el subencabezado inmediato de columnas de variación.
+                    if line == header + 1 and all(x > columns[-1][1] for _, x in period_columns(rows[line], lines[line])):
+                        continue
+                    break
+                first_value = next((i for i, word in enumerate(rows[line]) if re.match(r"^[+−-]?\d", word[4])), None)
+                if not first_value:
+                    continue
+                label = " ".join(word[4] for word in rows[line][:first_value])
+                if normalize(label) != normalize(metric):
+                    continue
+                column = positions[0]
+                original = numeric_cell(rows[line][first_value:], columns, column)
+                numeric_cell(rows[line][first_value:], columns, next(i for i, (p, _) in enumerate(columns) if p == other))
+                scope = f"{citation.doc_id}:{citation.pdf_page}:balance:{header}"
+                evidence = citation.model_copy(update={
+                    "evidence_id": f"{scope}:{line}:{column}", "snippet": f"{label} | {period.label} | {original}",
+                })
+                candidates.append(make_operand(evidence, metric, period, original, context, notes, scope,
+                                               bool(re.search(r"\d{1,3}(?:,\d{3}){2}", lines[line])), note_citation))
+    if len(candidates) > 1:
+        raise Abstain("Varios encabezados pueden corresponder a la fila del balance.")
+    return candidates[0] if candidates else None
+
+
 def market_operand(corpus, document, page, citation, metric, period, other, requested_currency, requested_scale,
                    notes, note_citation):
     inline = MARKET_ROW.fullmatch(metric)
@@ -318,6 +388,9 @@ def read_operand(corpus, ref, metric, period, *, other=None, requested_currency=
             return market_operand(corpus, document, page, citation, metric, period, other,
                                   requested_currency, requested_scale, notes, note_citation)
         selected = table_operands(page, period, metric, citation, notes, note_citation)
+        if selected:
+            return selected
+        selected = balance_operand(page, period, other, metric, citation, notes, note_citation)
         if selected:
             return selected
         # Aceptar texto solo si identifica los tres campos en una misma línea,

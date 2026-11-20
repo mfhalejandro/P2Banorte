@@ -8,8 +8,25 @@ from fastapi.testclient import TestClient
 
 from apps.api.deepseek_config import SpendLedger, USD_NANO
 from apps.api.deepseek_fixture import HYBRID_QUESTIONS
+from apps.api.financial_agent import parse_intent
+from apps.api.hybrid_agent import split_financial_operations
 from apps.api.hybrid_planner import question_hash
 from apps.api.main import create_app
+
+
+def test_ordered_operations_keep_separate_periods_and_units():
+    parts = split_financial_operations(
+        "Dos mediciones: primero, el crecimiento porcentual de la utilidad neta de Grupo Faro de 6M23 a 6M24; "
+        "segundo, cuántos puntos porcentuales avanzó el ROA de 1T24 a 2T24."
+    )
+    intents = [parse_intent(part) for part in parts]
+    assert [(i.metric, i.entity, i.base.label, i.current.label, i.operation) for i in intents] == [
+        ("utilidad neta", "Grupo Faro", "6M23", "6M24", "percent_change"),
+        ("ROA", "Grupo Faro", "1T24", "2T24", "difference"),
+    ]
+    assert [i.percentage_points for i in intents] == [False, True]
+    assert split_financial_operations("Calcula el cambio de utilidad neta entre 6M23 y 6M24 "
+                                     "y calcula el cambio del ROE entre 1T24 y 2T24. Usa GBP.") is None
 
 
 @pytest.fixture
