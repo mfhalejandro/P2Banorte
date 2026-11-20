@@ -389,6 +389,38 @@ class Corpus:
                 break
         return matches
 
+    def search_pages(self, groups, documents=None, limit=8):
+        """Cruzar grupos de términos por página cuando caen en fragmentos distintos."""
+        if documents == set():
+            return []
+        keys = sorted(documents or ())
+        restriction = " AND doc IN (" + ",".join("?" for _ in keys) + ")" if keys else ""
+        matches = {}
+        with closing(self.connect()) as db:
+            for index, group in enumerate(groups):
+                words = {word for label in group for word in terms(label)}
+                if not words:
+                    return []
+                expression = " OR ".join(f'"{word}"*' for word in sorted(words))
+                rows = db.execute(
+                    "SELECT doc, page, fragment FROM chunks WHERE chunks MATCH ?" + restriction
+                    + " ORDER BY bm25(chunks), doc, page, fragment LIMIT 1000",
+                    (expression, *keys),
+                )
+                ranked = {}
+                for rank, row in enumerate(rows):
+                    ranked.setdefault((row["doc"], row["page"]), (rank, row["fragment"]))
+                if not index:
+                    matches = ranked
+                else:
+                    matches = {page: (rank + ranked[page][0], fragment)
+                               for page, (rank, fragment) in matches.items() if page in ranked}
+                if not matches:
+                    return []
+        ordered = sorted(matches, key=lambda page: (matches[page][0], page))
+        return [SourceRef(doc_id=doc, pdf_page=page, fragment=matches[doc, page][1])
+                for doc, page in ordered[:limit]]
+
     def read_source(self, ref: SourceRef, *, topic="", explain=None, source=None):
         with closing(self.connect()) as db:
             row = db.execute("""

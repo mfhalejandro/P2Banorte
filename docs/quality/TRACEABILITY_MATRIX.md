@@ -102,3 +102,13 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | T-13 · Validación fuera de desarrollo | 21/22 en G01–G22 y 5/20 en cada variante local de J01–J20. El control sin términos propuestos fue mejor en G01. J16 conserva un fallo de moneda de la línea base. | PARTIAL. Mantener financial-local. |
 
 [Protocolo, evidencia e incidente inicial de P0](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#búsqueda-híbrida-experimental)
+
+### Sprint de generalización híbrida
+
+| Criterio | Evidencia | Resultado |
+|---|---|---|
+| SPEC-002-AC-01/02/03, T-05/T-07/T-11 | Cobertura por apartado, evidencia original, rechazo de divisas sin respaldo y preservación ante fallos del plan. 97 pruebas Python, 5 subcasos y regresiones de producto. | VERIFIED localmente. |
+| T-13 · Generalización | K01–K12 congelada. 7/12 local y 9/12 híbrido simulado. Los siete PASS se preservaron y se acreditaron dos rescates nuevos. | PARTIAL, evidencia exploratoria sin atribución a DeepSeek. |
+| SPEC-002-AC-06 · Ablación externa K | Preparado con límite de gasto y lista exacta. Requiere autorización del alcance para esta pasada. | NOT RUN en este sprint. |
+
+[Auditoría, recursos y oráculos](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#sprint-de-generalización-híbrida)

@@ -171,3 +171,74 @@ def test_global_flag_does_not_authorize_hybrid_and_allowlist_is_exact(sandbox, m
         assert query(client, "sections").headers["x-p2-deepseek-calls"] == "0"
         assert query(client, "indirect").headers["x-p2-deepseek-calls"] == "1"
     assert len(fixture.requests) == 1
+
+
+@pytest.mark.parametrize("currency", [
+    "francos suizos", "CHF", "chf", "dólares canadienses", "GBP", "libras esterlinas",
+    "pesos argentinos", "yenes", "moneda: ARS", "dólares de Hong Kong", "pesos de Chile",
+    "dólares (canadienses)",
+])
+def test_currency_request_stops_before_tools(currency, monkeypatch, tmp_path):
+    from apps.api.deepseek_fixture import synthetic_corpus
+
+    root = tmp_path / "fixture"
+    root.mkdir()
+    corpus = synthetic_corpus(str(root))
+    question = f"Compara la utilidad neta de Grupo Faro entre 3T24 y 3T25. Usa exclusivamente {currency}."
+    for provider in ("financial-local", "hybrid-experimental"):
+        monkeypatch.setenv("LLM_PROVIDER", provider)
+        monkeypatch.setenv("HYBRID_DEEPSEEK_SCOPE", "blocked")
+        with TestClient(create_app(corpus)) as client:
+            response = client.post("/api/chat", json={"message": question})
+            value = response.json()
+            assert response.status_code == 200 and value["status"] == "abstained"
+            assert "moneda" in value["answer"]
+            assert "12.29" not in value["answer"]
+            assert value["citations"] == value["tools_used"] == []
+            assert response.headers.get("x-p2-deepseek-calls", "0") == "0"
+
+
+def test_default_mode_cannot_inherit_external_provider(monkeypatch, tmp_path):
+    from apps.api.deepseek_config import runtime_env
+
+    envfile = tmp_path / "mode.env"
+    envfile.write_text("LLM_PROVIDER=deepseek\nDEEPSEEK_ALLOW_REAL_DATA=true\n")
+    envfile.chmod(0o600)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("P2BANORTE_ENV_FILE", str(envfile))
+    assert "LLM_PROVIDER" not in runtime_env()
+
+
+def test_report_year_is_a_source_constraint_and_future_is_protected():
+    from apps.api.hybrid_agent import document_needs, report_scope
+
+    question = "Según los estados financieros de 2025, ¿cómo se define el coeficiente de cobertura de liquidez de la Tenedora?"
+    need, = document_needs(question)
+    assert need.year == 2025 and need.kind == "definition"
+    assert report_scope(need, "EEFF 2025 Grupo.pdf")
+    assert not report_scope(need, "EEFF 2024 Grupo.pdf")
+    assert not report_scope(need, "Anexo anual 2025 Grupo.pdf")
+    assert not document_needs("¿Qué reglas de liquidez adoptará la Tenedora en 2098?")
+
+
+def test_relative_year_requires_an_explicit_anchor():
+    from apps.api.financial_agent import normalize_periods
+
+    assert normalize_periods("del 3T23 al tercer trimestre del año siguiente") == "del 3T23 al 3T24"
+    assert normalize_periods("tercer trimestre del año siguiente") == "tercer trimestre del año siguiente"
+
+
+def test_plan_cannot_rewrite_financial_constraints(sandbox, monkeypatch):
+    monkeypatch.setenv("HYBRID_DEEPSEEK_SCOPE", "synthetic")
+    def bad_plan(body):
+        slot, = body["pendientes"]
+        interpretation = slot["restricciones"] | {"currency": "CHF"}
+        return wire_reply({"subquestions": [{"slot": slot["slot"], "search_terms": [],
+                                            "interpretation": interpretation}]})
+    fixture = PlannerFixture(bad_plan)
+    with TestClient(create_app(deepseek_transport=httpx.MockTransport(fixture.send))) as client:
+        result = query(client, "metrics")
+        assert result.headers["x-hybrid-decision"] == "invalid-plan"
+        assert result.headers["x-p2-deepseek-calls"] == "1"
+        assert "12.29 millones de mxn" in result.json()["answer"]
+        assert "pendiente verificar roe" in result.json()["answer"]

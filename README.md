@@ -118,7 +118,7 @@ Abre http://127.0.0.1:5194. Los dos servicios se pueden reiniciar por separado c
 
 FastAPI usa DeepSeek Flash con el contrato Chat Completions, cinco funciones V3 y thinking desactivado. El modelo selecciona identificadores temporales de bloques. El backend valida referencias y comparabilidad, ejecuta Decimal y compone el texto a partir de resultados observados. El visor PNG sigue siendo local y la herramienta de inspección comprueba el render. [API oficial](https://api-docs.deepseek.com/en/) · [Tool calling](https://api-docs.deepseek.com/guides/tool_calls/)
 
-Guarda la API key en la variable DEEPSEEK_API_KEY del archivo .env privado de la raíz. Aplica chmod 600 .env. El backend lo lee directamente al arrancar. P2BANORTE_ENV_FILE permite elegir otra ruta privada. Se admiten asignaciones simples y comillas completas, sin expansión. Las variables explícitas del proceso tienen prioridad. El archivo permanece ignorado por Git. Usa estos ajustes de prueba, además de tu credencial.
+Guarda la API key en la variable DEEPSEEK_API_KEY del archivo .env privado de la raíz. Aplica chmod 600 .env. El backend lo lee cuando el proceso selecciona explícitamente un proveedor externo. P2BANORTE_ENV_FILE permite elegir otra ruta privada. Se admiten asignaciones simples y comillas completas, sin expansión. Las variables explícitas del proceso tienen prioridad. El archivo permanece ignorado por Git. Usa estos ajustes de prueba, además de tu credencial.
 
 ~~~dotenv
 DEEPSEEK_BASE_URL=https://api.deepseek.com

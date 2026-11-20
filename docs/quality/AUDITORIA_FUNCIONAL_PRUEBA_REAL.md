@@ -436,3 +436,54 @@ La etapa B de planificación DeepSeek con preguntas ficticias específicas queda
 **VERIFIED** el contrato híbrido acotado, el fallback local, las regresiones, el alcance de salida y la pasada G01–G22. **PARTIAL** la generalización. La muestra nueva no mostró mejora y el control de rescates en G01–G22 no demostró beneficio incremental del modelo. **NOT RUN** la evaluación externa de J01–J20 y la prueba de concurrencia en el entorno final. Se recomienda mantener **financial-local** para la prueba real supervisada y conservar el híbrido como candidato experimental.
 
 La captura privada del experimento se conserva en `/tmp/p2-hybrid.G0ND2HOP`. `known-live.jsonl` contiene los 44 POST pares y tiene SHA-256 `6ba4ea0f5f1b708af96a2f0b858335af9aed95c135d1c4289ab7b58f2e15bbff`. `independent-local.jsonl` tiene SHA-256 `a1f7b0e405032f3a1246fd2b4091025df06493226e133ce61d1b99d18c8a6a70`. El [evaluador](../../tests/financial/evaluate_hybrid.py) reproduce los controles con `check-oracles`, `regression`, `known-mock` e `independent-local`, usando `--data` y el índice preexistente. La opción `known-live` exige una autorización vigente, servicios aislados de loopback y lista exacta. Los resultados históricos del simulacro se conservan.
+
+## Sprint de generalización híbrida
+
+El trabajo partió de `e912da2`, con HEAD y origin/main alineados y Git limpio. Pasaron integridad RCTF y escritura aislada. Los SHA-256 de los 24 PDF coincidieron con el catálogo y el índice existente. La comparación de G01–G22 y J01–J20 del experimento anterior se conserva como evidencia histórica. G y J se trataron como baterías conocidas durante este sprint.
+
+### Diagnóstico y cambios
+
+| Familia de fallos | Causa previa | Cambio verificado o candidato |
+|---|---|---|
+| J01–J07 · preguntas documentales abiertas | Formas de pregunta y conectores demasiado estrechos. El filtro FTS exigía coincidencias en un mismo fragmento. | Requisitos por apartado, facetas comprobables, cruce de términos entre fragmentos de la misma página y lectura del pasaje original. |
+| J08 · fecha y alcance | Se descartaba todo rescate ante dígitos y varias palabras de alcance. | Separar año, tipo de informe y entidad. Un pasaje acotado puede respaldar el límite de una afirmación sin extrapolarla al resto del grupo. |
+| J10–J15 · operaciones y periodos | La clasificación dependía de formas verbales y periodos explícitos. El fallo del primer indicador impedía aislar el segundo. | Reconocer variaciones nominales, operaciones ligadas y referencias temporales con un ancla anterior. El segundo indicador se valida y calcula por su cuenta si las restricciones permiten separarlo. |
+| J16 · moneda | Una moneda no incluida en el parser podía perderse y producir una cifra válida en otra divisa. | Detectar nombres y códigos ISO no respaldados antes de ejecutar herramientas. Mantener las comprobaciones de moneda y escala contra operandos originales. |
+| G01 · términos remotos | Una sugerencia podía desplazar candidatos pertinentes. | Conservar los primeros resultados de la búsqueda original y tratar los términos sugeridos como una búsqueda adicional dentro del mismo presupuesto. |
+
+El detector comprueba texto y cita por apartado y distingue cobertura confirmada, evidencia faltante y protección por incompatibilidad. Para alcance documental exige una fuente compatible con año y entidad. Los cálculos siguen en las herramientas locales V3 y Decimal. El modelo puede seleccionar apartados y términos de búsqueda acotados y confirmar una interpretación financiera tipada, que se rechaza si difiere de las restricciones derivadas localmente. Las construcciones financieras que el backend no puede vincular de forma segura a una métrica y a periodos siguen sin cálculo. El modo predeterminado tampoco puede heredar un proveedor remoto de `.env`.
+
+Las pruebas verificaron el rechazo de CHF, francos suizos, dólares canadienses, GBP, libras esterlinas, pesos argentinos, yenes y otros ejemplos de código o nombre explícito, con respuesta HTTP 200 de abstención y cero herramientas en el caso simulado. Los planes con una moneda alterada se rechazaron y conservaron el resultado local. Las pruebas de timeout, transporte inválido, presupuesto y fallo de evidencia seguían pasando. La lista ISO identifica requisitos de moneda. La evidencia y la operación local determinan las monedas calculables. [Referencia de ISO 4217](https://www.six-group.com/en/products-services/financial-information/market-reference-data/data-standards.html)
+
+### Congelación y evaluación
+
+K01–K12 se definió antes de probar el candidato. Se verificaron contra los originales las frases de referencia y la geometría de las celdas requeridas. El archivo de preguntas y oráculos tiene SHA-256 `c2f36d8a1267aabce119b94b55a6d9aae5f1b7f60d92644643ac3a2a3efdeac4`. El manifiesto del candidato tiene SHA-256 `b7f05218ef3f82f986ef03e52054f09e4d8af4b191047d5ced956dd1e91fdadf`. K se interpreta como evidencia exploratoria de 12 preguntas. [Preguntas y oráculos](../../tests/financial/hybrid_holdout.py) · [Evaluador](../../tests/financial/evaluate_hybrid.py)
+
+| Batería | financial-local PASS / PARTIAL / FAIL | Híbrido simulado PASS / PARTIAL / FAIL | DeepSeek real de este sprint |
+|---|---:|---:|---|
+| G01–G22, regresión conocida | 16 / 1 / 5 | 22 / 0 / 0 | NOT RUN |
+| J01–J20, diagnóstico conocido | 8 / 0 / 12 | 11 / 5 / 4 | NOT RUN |
+| K01–K12, muestra congelada | 7 / 0 / 5 | 9 / 1 / 2 | NOT RUN, autorización pendiente |
+
+G conserva los 16 PASS, con identidad de respuesta, estado, advertencias, citas y herramientas, y sin planes simulados. G01, G03, G05 y G12 se resolvieron con el doble. G15 y G19 se resolvieron con diagnósticos locales. Se cotejaron 25/25 citas locales y 31/31 híbridas. En J, la mejora de 5 a 8 PASS locales frente al registro anterior incluye J12, J13 y la abstención de moneda J16. Sobre esos 8 PASS, el híbrido añade J02, J08 y J11. Este último se resuelve localmente. Se activaron nueve planes sobre casos incompletos, incluidos los rescates parciales y los que no consiguieron evidencia. J10 y J15 quedaron sin rescate. Se cotejaron 10/10 citas locales y 18/18 híbridas en el PDF. Algunas respuestas parciales citan fuentes distintas de las exigidas por sus oráculos.
+
+En K la diferencia exploratoria fue de **2 PASS (+16,67 puntos porcentuales)**. K02 recuperó la definición y el horizonte del CCL en p. 153. K03 acreditó los segmentos y los controles de originación con dos páginas. K04 quedó PARTIAL. Citó el cierre de 2024, que identifica un destinatario semanal distinto del cierre de 2025 esperado por el oráculo. K01 activó el plan y quedó sin respaldo verificado. K08 no activó plan con evidencia todavía no resuelta. De los cinco positivos incompletos del control se activaron cuatro, todos justificados, y uno fue falso negativo según el oráculo. Se conservaron los siete PASS locales sin activar planes. Los negativos de moneda, no aditividad, entidad y perímetro conservaron la abstención. No se observó un cálculo erróneo en K.
+
+| Métrica K01–K12, cada variante con 2 CPU y 4 GiB | financial-local | Híbrido simulado |
+|---|---:|---:|
+| Comprobaciones de contenido del oráculo satisfechas | 15 | 23 |
+| Citas PNG accesibles y texto o celda cotejados | 8/8 | 12/12 |
+| Citas pertinentes al criterio fijado, revisión contextual | 8/8 | 11/12 |
+| Mediana / P95 POST | 0,618 / 7,358 s | 0,960 / 7,563 s |
+| CPU total / RSS pico del proceso evaluador y API en proceso | 30,94 s / 150,1 MiB | 33,54 s / 200,4 MiB |
+| Planes simulados / llamadas externas / tokens / USD | 0 / 0 / 0 / 0 | 4 / 0 / 0 / 0 |
+
+P95 usa rango más próximo. Con 12 observaciones coincide con el máximo. Las métricas de citas distinguen la presencia en el PDF de la correspondencia con el origen y el destinatario exigidos en K04. El resultado de DeepSeek como agente principal y la pasada real G del experimento anterior son históricos. Este sprint no acredita una ganancia incremental atribuible al modelo.
+
+Una prueba conocida de la validación final detectó un falso rechazo por confundir `pesos de Grupo Faro` con una divisa extranjera. El fallo afectó tres pruebas Python conocidas y el caso P06a. Se archivó la versión usada en K y se corrigió la distinción moneda/entidad en el árbol de trabajo. La comprobación aislada de interpretación reprodujo las mismas restricciones para G, J y K en las dos versiones. No se repitió K. La evidencia de K y su latencia corresponden a la versión archivada.
+
+Se solicitó aprobación para una única pasada externa K01–K12, máximo 12 llamadas y cota incremental USD 0,018432, sobre un ledger de USD 0,1310418 y techo propuesto de USD 0,15. El ámbito solicitado comprende la pregunta literal y los términos derivados, con 20 minutos de vigencia. La retención efectiva sigue sin acreditarse. Se conservaron el bloqueo de salida y el ledger original. [Tarifas oficiales](https://api-docs.deepseek.com/quick_start/pricing/)
+
+Los JSONL, las mediciones de recursos y la copia congelada quedaron en `/tmp/p2-sprint-120`. **Recomendación** · Conservar `financial-local` para la próxima entrega. K apoya la mejora del detector y de la recuperación local en una muestra pequeña. DeepSeek real queda **NOT RUN**, por lo que la atribución y la recomendación de adopción del híbrido siguen **PARTIAL**.
+
+La verificación de cierre confirmó **97 pruebas Python y 5 subcasos**, **6 Chromium**, **14/14 financieros** con identidad de estado, texto, citas y herramientas frente al archivo histórico y 25/25 PNG, **11/11 de aceptación**, **28/28 de la ampliada** y **10/10 en B01–B10**. En la repetición del conjunto conocido posterior a la corrección, P06a volvió a PASS. Los archivos K de la versión archivada conservan las huellas `fa7a144887e6bdf51eb38bf6f6087a2afc65e92035636a34c0087275d64bebc4` y `195bd2d3c2bc011eddbd0a8e8e9fa53d1954991996aa692a063b65e9cc824692` para local y simulado respectivamente.

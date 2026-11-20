@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .agent import ChatResponse, ProviderUnavailable
 from .corpus import Citation, Corpus, SourceRef, documentary_query
 from .finance import Abstain, Operand, Operation, PERIOD, Period, calculate, check_stock_sum, display, local_period, normalize
+from .currency_request import verify_currency_request
 from .financial_evidence import CURRENCY, UnverifiedBasis, currency_key, find_candidates, read_operand
 
 ToolName = Literal["list_documents", "search_corpus", "read_source", "financial_calculator", "inspect_page_visual"]
@@ -67,7 +68,7 @@ class Intent:
 
 
 FINANCIAL_VERB = r"(?:compara(?:r)?|calcula(?:r)?|suma(?:r)?(?!\s+(?:de|en|entre)\b))"
-CHANGE_VERB = r"(?:cambi[oó]|vari[oó]|aument[oó]|disminuy[oó]|subi[oó]|baj[oó]|creci[oó]|cay[oó]|se\s+(?:increment[oó]|redujo))"
+CHANGE_VERB = r"(?:cambi[oó]|vari[oó]|aument[oó]|disminuy[oó]|subi[oó]|baj[oó]|creci[oó]|cay[oó]|mejor[oó]|empeor[oó]|se\s+(?:increment[oó]|redujo|movi[oó]))"
 OPERATION_NOUN = r"(?:variaci[oó]n(?:\s+porcentual)?|diferencia|cambio|comparaci[oó]n|suma|raz[oó]n|ratio)"
 NOMINAL_OPERATION = rf"(?:la\s+|el\s+)?(?P<operation>{OPERATION_NOUN})\s+(?:del?|en|entre)\b"
 FINANCIAL_REQUEST = re.compile(
@@ -106,10 +107,18 @@ COMPARABILITY_QUERY = re.compile(
     r"^(?:se puede afirmar que\s+)?(.+?)\s+(?:tuvo|experiment[oó]|registr[oó])"
     r"\s+una\s+variaci[oó]n\s+(?:directamente\s+)?comparable\s+entre\b", re.I,
 )
-SHARE_QUERY = re.compile(r"\bqu[eé]\s+(?:porcentaje|proporci[oó]n)\s+representa\s+([^?]+)", re.I)
+SHARE_QUERY = re.compile(r"\bqu[eé]\s+(?:porcentaje|proporci[oó]n|fracci[oó]n porcentual)\s+representa\s+([^?]+)", re.I)
 DUAL_CHANGE = re.compile(
     r"\b(?:calcula|determina|indica)\s+(?:la\s+)?diferencia\s+(?:absoluta\s+)?y\s+(?:la\s+)?"
     r"variaci[oó]n\s+(?:relativa|porcentual)\s+(?:del?|en)\b", re.I,
+)
+BOUND_DUAL = re.compile(
+    r"^para (?P<subject>[^,;]+),\s*(?:calcula|muestra|indica|dame)\s+"
+    r"(?:la )?diferencia absoluta y (?:la )?variaci[oó]n (?:relativa|porcentual)\b", re.I
+)
+NOMINAL_RATE = re.compile(
+    r"\b(?:retroceso|ca[ií]da|crecimiento|incremento|descenso|variaci[oó]n) porcentual "
+    r"(?:del?|de)\s+(?P<subject>[^?]+)", re.I
 )
 RELATIVE_QUERY = re.compile(rf"\b(?:determina\s+)?cu[aá]nto\s+{CHANGE_VERB}\s+porcentualmente\b", re.I)
 TWO_CURRENCIES = re.compile(
@@ -119,17 +128,33 @@ TWO_CURRENCIES = re.compile(
 
 def normalize_periods(text: str) -> str:
     year = None
+    anchors = {local_period(hit).year for hit in PERIOD.finditer(text)}
+    if len(anchors) == 1:
+        year = str(next(iter(anchors)))
 
     def replace_period(match):
         nonlocal year
         ordinal, months, explicit = match.groups()
+        if re.match(r" del año (?:siguiente|mismo)\b", text[match.end():], re.I):
+            return match[0]
         year = explicit or year
         if not year:
             return match[0]
         label = f"{ORDINAL[ordinal.lower()]}T" if ordinal else ("9M" if "nueve" in months.lower() else "6M")
         return label + year[-2:]
 
-    return WRITTEN_PERIOD.sub(replace_period, text)
+    def resolve_relative(match):
+        ordinal, direction = match.groups()
+        previous = list(PERIOD.finditer(normalized[:match.start()]))
+        if not previous:
+            return match[0]
+        year = local_period(previous[-1]).year + int(direction == "siguiente")
+        name = {"primero": "primer", "tercero": "tercer"}.get(ordinal.lower(), ordinal.lower())
+        return f"{ORDINAL[name]}T{year % 100:02}"
+
+    normalized = WRITTEN_PERIOD.sub(replace_period, text)
+    return re.sub(r"\b(primer(?:o)?|segundo|tercer(?:o)?|cuarto)(?: trimestre)? "
+                  r"(?:de ese mismo año|del año (siguiente|mismo))\b", resolve_relative, normalized, flags=re.I)
 
 
 def recognize_financial_request(question: str) -> FinancialRequest | None:
@@ -138,6 +163,11 @@ def recognize_financial_request(question: str) -> FinancialRequest | None:
         part for part in re.split(r"(?<=[.?!])\s+", content)
         if not VALUE_FORMAT.fullmatch(part.strip(" ¿?!."))
     )
+    if dual := BOUND_DUAL.match(content.strip(" ¿¡")):
+        return FinancialRequest(content, PERIOD.split(dual["subject"], maxsplit=1)[0], "percent_change", False, True)
+    if not DUAL_CHANGE.search(content) and (rate := NOMINAL_RATE.search(content)):
+        indicator = PERIOD.split(rate["subject"], maxsplit=1)[0]
+        return FinancialRequest(content, indicator, "percent_change", False)
     if share := SHARE_QUERY.search(content):
         return FinancialRequest(content, PERIOD.split(share[1], maxsplit=1)[0], "participation", False)
     if comparable := COMPARABILITY_QUERY.match(content.strip(" ¿")):
@@ -188,6 +218,9 @@ def requires_financial_tools(question: str) -> bool:
 
 
 def parse_intent(question: str) -> Intent:
+    verify_currency_request(question)
+    question = re.sub(r"\b(?:exclusivamente|únicamente|unicamente|solamente|solo)\s+"
+                      rf"(?={CURRENCY.pattern})", "", question, flags=re.I)
     missing = "Indica un indicador y dos periodos distintos, por ejemplo «Compara utilidad neta de Grupo Faro entre 3T24 y 3T25»."
     request = recognize_financial_request(question)
     if request is None:
@@ -207,7 +240,7 @@ def parse_intent(question: str) -> Intent:
     metric, entity = (metric_entity[:subject.start()], subject[1]) if subject else (metric_entity, "")
     if len(periods) != 2 or not normalize(metric):
         raise Abstain(missing)
-    if request.operation == "participation" or re.search(r"\brespecto\s+al?\s+$", request.content[:matches[-1].start()], re.I):
+    if request.operation == "participation" or re.search(r"\brespecto\s+(?:al?|de)\s+$", request.content[:matches[-1].start()], re.I):
         periods.reverse()
     key = request.content.casefold()
     if "acumulad" in key and all(p.kind == "quarter" for p in periods):
@@ -228,6 +261,10 @@ def parse_intent(question: str) -> Intent:
                     raise Abstain("Las suboperaciones deben declarar la misma escala o ambas dejarla a la fuente.")
                 units.append((first_scale, first_name))
     units.extend(inline_units)
+    # Una unidad anterior a los periodos o en una instrucción separada también obliga.
+    if not currencies_requested:
+        units.extend(match.groups() for match in re.finditer(
+            rf"\b(?:en|usa|utiliza|moneda\s*:)\s+{CURRENCY.pattern}", request.content, re.I))
     currencies = {currency_key(name) for _, name in units}
     scales = {scale.lower() for scale, _ in units if scale}
     if (len(currencies) > 1 or len(scales) > 1 or (request.percentage_points and units)

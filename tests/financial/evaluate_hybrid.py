@@ -20,6 +20,7 @@ from apps.api.hybrid_planner import Plan, Step
 from apps.api.main import create_app
 from evaluate_acceptance import OPERATIONS, PARAPHRASES, QUESTIONS, assess as acceptance, contains, live, table_cell
 from evaluate_adversarial import B_ORACLES, B_QUESTIONS, NEW, assess, inspect, original
+from hybrid_holdout import K, K_OPERANDS
 
 
 LIQUIDITY = "EEFF 2025 Grupo_.pdf"
@@ -173,16 +174,17 @@ def test_row(client, case, question):
 
 def score(root, row, oracle, label):
     mode = MODE if label.startswith("hybrid") else None
-    if label == "financial-local" and row["id"].startswith("J"):
-        documents = {*(f"J{i:02}" for i in range(1, 9)), "J17"}
+    if label == "financial-local" and row["id"].startswith(("J", "K")):
+        documents = {*(f"J{i:02}" for i in range(1, 9)), "J17", "K01", "K02", "K03", "K04"}
         mode = "extractivo local" if row["id"] in documents else "financiero local (doble)"
     result = assess(root, row, oracle, expected_mode=mode,
-                    citation_check=inspect_independent if row["id"].startswith("J") else inspect)
+                    citation_check=inspect_independent if row["id"].startswith(("J", "K")) else inspect)
     have = {tuple(part.strip() for part in cite["snippet"].split("|"))
             for cite, check in zip(row["citations"], result["cotejo"], strict=True) if check["semantic"]}
-    if result["veredicto"] == "PASS" and not REQUIRED_OPERANDS.get(row["id"], set()) <= have:
+    required = (REQUIRED_OPERANDS | K_OPERANDS).get(row["id"], set())
+    if result["veredicto"] == "PASS" and not required <= have:
         result["veredicto"] = "PARTIAL"
-        result["missing_operands"] = sorted(REQUIRED_OPERANDS[row["id"]] - have)
+        result["missing_operands"] = sorted(required - have)
     return result
 
 
@@ -207,11 +209,13 @@ def verify_health(base, mode, size, scope=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("suite", choices=("regression", "known-mock", "independent-local", "check-oracles", "synthetic", "known-live"))
+    parser.add_argument("suite", choices=("regression", "known-mock", "independent-local", "j-mock", "k-mock",
+                                               "check-oracles", "synthetic", "known-live", "k-live"))
     parser.add_argument("--data", type=Path)
     parser.add_argument("--port", type=port, default=8196)
     parser.add_argument("--local-port", type=port, default=8197)
     parser.add_argument("--authorized-real-data", action="store_true")
+    parser.add_argument("--variant", choices=("both", "local", "mock"), default="both")
     args = parser.parse_args()
     if args.suite == "synthetic":
         base = f"http://127.0.0.1:{args.port}"
@@ -223,37 +227,41 @@ def main():
         parser.error("Se requiere el directorio de datos.")
     root = args.data.resolve(strict=True)
     if args.suite == "check-oracles":
-        for source in sorted({ref for _, _, _, refs in INDEPENDENT.values() for ref in refs}):
+        for source in sorted({ref for _, _, _, refs in (INDEPENDENT | K).values() for ref in refs}):
             filename, page, snippet = source
             if not original(root / filename, page, snippet):
                 raise SystemExit(f"Oráculo sin respaldo: {filename}, p. {page}.")
-        for case, expected in REQUIRED_OPERANDS.items():
+        for case, expected in (REQUIRED_OPERANDS | K_OPERANDS).items():
             found = set()
-            for filename, page, _ in INDEPENDENT[case][3]:
+            for filename, page, _ in (INDEPENDENT | K)[case][3]:
                 with pymupdf.open(root / filename) as pdf:
                     found |= {operand for operand in expected if aligned(pdf[page - 1], *operand)}
             if found != expected:
                 raise SystemExit(f"Operandos fuera de contexto en {case}.")
-        emit({"oracle_count": len(INDEPENDENT), "verified_sources": True, "verified_operands": True})
+        emit({"oracle_count": len(INDEPENDENT) + len(K), "verified_sources": True, "verified_operands": True})
         return
-    if args.suite == "known-live":
+    if args.suite in {"known-live", "k-live"}:
         if not args.authorized_real_data:
             parser.error("La comparación real requiere autorización independiente.")
         local = f"http://127.0.0.1:{args.local_port}"
         hybrid = f"http://127.0.0.1:{args.port}"
-        verify_health(local, "financiero local (doble)", 24)
         verify_health(hybrid, MODE, 24, "authorized")
-        for case, (question, *oracle) in NEW.items():
-            for label, base in (("financial-local", local), ("hybrid-real", hybrid)):
+        variants = (("hybrid-real", hybrid),)
+        if args.suite == "known-live":
+            verify_health(local, "financiero local (doble)", 24)
+            variants = (("financial-local", local), *variants)
+        cases = K if args.suite == "k-live" else NEW
+        for case, (question, *oracle) in cases.items():
+            for label, base in variants:
                 emit({**score(root, live(base, case, question), oracle, label), "execution": label})
         return
     # Local con un planificador en proceso para medir el techo del mecanismo.
     # Las otras pasadas de esta rama conservan el bloqueo de egress.
     os.environ["HYBRID_DEEPSEEK_SCOPE"] = "blocked"
-    simulated = SimulatedPlanner() if args.suite == "known-mock" else None
+    simulated = SimulatedPlanner() if args.suite in {"known-mock", "j-mock", "k-mock"} else None
     with ExitStack() as stack:
         os.environ["LLM_PROVIDER"] = "financial-local"
-        local = stack.enter_context(TestClient(create_app()))
+        local = stack.enter_context(TestClient(create_app())) if args.variant != "mock" else None
         if args.suite == "regression":
             for case, question in {**QUESTIONS, **PARAPHRASES, **OPERATIONS}.items():
                 emit(acceptance(root, test_row(local, case, question)))
@@ -261,10 +269,12 @@ def main():
                 emit({**assess(root, test_row(local, case, question), B_ORACLES[case]), "execution": "financial-local"})
             return
         os.environ["LLM_PROVIDER"] = "hybrid-experimental"
-        hybrid = stack.enter_context(TestClient(create_app(hybrid_planner=simulated)))
-        cases = NEW if simulated else INDEPENDENT
+        hybrid = stack.enter_context(TestClient(create_app(hybrid_planner=simulated))) if args.variant != "local" else None
+        cases = {"known-mock": NEW, "k-mock": K}.get(args.suite, INDEPENDENT)
         for case, (question, *oracle) in cases.items():
             for label, client in (("financial-local", local), ("hybrid-mock" if simulated else "hybrid-blocked", hybrid)):
+                if client is None:
+                    continue
                 row = score(root, test_row(client, case, question), oracle, label)
                 row["execution"] = label
                 row["simulated_plans"] = simulated.requests[question] if simulated and label == "hybrid-mock" else 0
