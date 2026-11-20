@@ -242,3 +242,93 @@ def test_plan_cannot_rewrite_financial_constraints(sandbox, monkeypatch):
         assert result.headers["x-p2-deepseek-calls"] == "1"
         assert "12.29 millones de mxn" in result.json()["answer"]
         assert "pendiente verificar roe" in result.json()["answer"]
+
+
+def test_production_planner_never_loads_external_settings_or_transport(sandbox, monkeypatch, tmp_path, caplog):
+    from apps.api.deepseek_fixture import synthetic_corpus
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("El modo determinista no debe configurar ni llamar al proveedor externo.")
+
+    root = tmp_path / "deterministic-corpus"
+    root.mkdir()
+    corpus = synthetic_corpus(str(root))
+    envfile = tmp_path / "provider.env"
+    with envfile.open("a") as stream:
+        stream.write("LLM_PROVIDER=deepseek\nHYBRID_DEEPSEEK_SCOPE=authorized\n")
+    monkeypatch.setattr("apps.api.main.planner_settings", forbidden)
+    with TestClient(create_app(corpus, deepseek_transport=httpx.MockTransport(forbidden))) as client:
+        health = client.get("/api/health").json()
+        assert health["planner"] == "deterministic"
+        assert health["external_data_scope"] == "blocked"
+        assert health["external_provider_ready"] is False
+        with caplog.at_level("INFO", logger="uvicorn.error"):
+            rescued = query(client, "sections")
+        assert rescued.headers["x-hybrid-rescue-activated"] == "1"
+        assert rescued.headers["x-hybrid-sections-verified"] == "0,1"
+        assert rescued.headers["x-hybrid-sections-attempted"] == "0:definition,1:passage"
+        assert rescued.headers["x-hybrid-planner"] == "deterministic"
+        assert int(rescued.headers["x-hybrid-rescue-ms"]) >= 0
+        assert "activated=1 attempted=0:definition,1:passage verified=0,1" in caplog.text
+        assert "reserva de efectivo" in rescued.json()["answer"]
+        assert HYBRID_QUESTIONS["sections"] not in caplog.text
+        for name in ("complete", "invalid", "entity_metric"):
+            assert query(client, name).headers["x-hybrid-rescue-activated"] == "0"
+        for key in ("x-p2-deepseek-calls", "x-p2-deepseek-input", "x-p2-deepseek-output", "x-p2-deepseek-usd-upper"):
+            assert Decimal(rescued.headers[key]) == 0
+    with sqlite3.connect(sandbox) as db:
+        assert db.execute("SELECT nano FROM spend").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("failure", ["timeout", "invalid-schema"])
+def test_deterministic_rescue_preserves_calculation_on_failure(monkeypatch, tmp_path, failure):
+    from apps.api.deepseek_fixture import synthetic_corpus
+
+    root = tmp_path / "fallback-corpus"
+    root.mkdir()
+    corpus = synthetic_corpus(str(root))
+
+    async def broken_plan(self, question, slots, totals):
+        if failure == "timeout":
+            raise TimeoutError()
+        return {"subquestions": [{"slot": -1, "search_terms": []}]}
+
+    monkeypatch.setenv("LLM_PROVIDER", "hybrid-experimental")
+    monkeypatch.setenv("HYBRID_DEEPSEEK_SCOPE", "blocked")
+    monkeypatch.setattr("apps.api.hybrid_planner.DeterministicPlanner.plan", broken_plan)
+    with TestClient(create_app(corpus)) as client:
+        response = query(client, "metrics")
+        assert response.headers["x-hybrid-decision"] == ("fallback" if failure == "timeout" else "invalid-plan")
+        assert response.headers["x-hybrid-rescue-activated"] == "1"
+        assert response.headers["x-hybrid-sections-verified"] == "-"
+        assert response.headers["x-p2-deepseek-calls"] == "0"
+        assert "12.29 millones de mxn" in response.json()["answer"]
+        assert "pendiente verificar roe" in response.json()["answer"]
+        assert len(response.json()["citations"]) == 2
+
+
+def test_calendar_exclusion_does_not_cite_an_unrelated_basis_warning():
+    import asyncio
+
+    from apps.api.agent import ChatResponse
+    from apps.api.hybrid_agent import HybridAgent, RequestBudget
+    from apps.api.hybrid_planner import DeterministicPlanner
+    from types import SimpleNamespace
+
+    async def verify():
+        base = ChatResponse(
+            request_id="fixture", provider_mode="financiero local (doble)", status="abstained",
+            answer="No puedo calcular. Falta base común por cambio de perímetro.",
+            citations=[], warnings=["Cambio de perímetro."], tools_used=["read_source"],
+        )
+        agent = HybridAgent(SimpleNamespace(corpus=None), None, DeterministicPlanner())
+        budget = RequestBudget(asyncio.get_running_loop().time() + 15)
+        reply, stage = await agent.finance(
+            "¿Qué proporción representa la utilidad neta de 4T25 respecto de 9M25?", base, budget, None
+        )
+        assert stage == "local-diagnostic"
+        assert "4T25 no está incluido en el acumulado solicitado 9M25" in reply.answer
+        assert reply.status == "abstained" and not reply.citations and not reply.warnings
+        assert budget.rescue_started is None
+
+    asyncio.run(verify())

@@ -178,3 +178,11 @@ El propietario autorizó una pasada G01–G22 con techo acumulado USD 0,18. Se o
 ## 2026-11-20 · Sprint de generalización híbrida
 
 Codex verificó `e912da2`, integridad RCTF, 24 PDF y SQLite existente. Implementó requisitos por apartado y comprobación de origen, fecha, entidad y divisa. La pasada exploratoria K, congelada antes de medir, obtuvo 7/12 local y 9/12 con el híbrido simulado. El último filtro de moneda generó un falso rechazo en tres pruebas conocidas. Se archivó la versión de K, se distinguió la entidad de la divisa y se confirmó el cierre en 97 pruebas Python, 5 subcasos, 6 Chromium, 14/14 financieros, 11/11 de aceptación, 28/28 ampliada y 10/10 en B01–B10. No se repitió K. La comparación externa queda NOT RUN y el ledger original permanece en USD 0,1310418. [Auditoría y evidencia](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#sprint-de-generalización-híbrida)
+
+## 2026-11-20T21:57:10+01:00 · Reinicio local de la demo
+
+Se reiniciaron p2banorte-api.service y p2banorte-web.service con systemctl --user restart. La API directa en 8194 y a través de Vite en 5194 informó estado ok, 24 documentos y modo financial-local. El frontend respondió HTTP 200.
+
+## 2026-11-20T22:28:17+01:00 · Rescate local en la demo web
+
+Codex verificó la salida bloqueada y activó hybrid-experimental con el planificador determinista en p2banorte-api.service. La web en 5194 comprobó D05, F05 y S06. En A/B, 13 PASS locales se conservaron y B obtuvo 20/20, 31/31 citas pertinentes, seis rescates completos y cero consumo externo. Pasaron 103 pruebas Python, 5 subcasos, 6 Chromium, 14/14 financieros, 11/11 de aceptación, 28/28 ampliada y 10/10 B. Los RCTF, PDF, SQLite y ledger original quedaron intactos. [Auditoría](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#rescate-determinista-local-en-la-aplicación-web)

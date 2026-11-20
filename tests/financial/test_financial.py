@@ -464,3 +464,20 @@ def test_participation_needs_containment_same_table_and_same_basis():
         calculate("participation", whole, replace(part, citation=part.citation.model_copy(update={"pdf_page": 2})))
     with pytest.raises(Abstain, match="bases contables"):
         calculate("participation", whole, replace(part, basis="individual"))
+
+
+def test_indicator_stops_before_article_of_a_written_period():
+    from apps.api.financial_agent import parse_intent
+
+    intent = parse_intent("¿Cuánto bajó la capitalización de mercado en pesos entre el primer trimestre de 2024 y el segundo trimestre de ese año?")
+    assert intent.metric == "capitalización de mercado"
+    assert intent.output_currency == "pesos"
+    assert (intent.base.label, intent.current.label) == ("1T24", "2T24")
+
+
+def test_indicator_label_distinguishes_a_section_heading_from_a_second_row():
+    from apps.api.financial_evidence import metric_label, row_label
+
+    assert row_label("ROA (3)\nOperación:") == "ROA (3)"
+    assert metric_label("ROA (3)\nOperación:") == "roa"
+    assert metric_label("ROA (3)\nROE (2)") != "roa"

@@ -138,8 +138,17 @@ def exact_header(value, period):
     return bool(match and local_period(match) == period)
 
 
+def row_label(cell):
+    parts = cell.strip().splitlines()
+    if len(parts) > 1 and all(re.fullmatch(r"(?:[^\W\d_]+\s*){1,4}:", part.strip()) for part in parts[1:]):
+        # Un encabezado de sección puede compartir la celda de la última fila
+        # de la sección anterior. No quitar una segunda etiqueta de indicador.
+        return parts[0].strip()
+    return cell
+
+
 def metric_label(cell):
-    return normalize(ROW_NOTE.sub("", cell))
+    return normalize(ROW_NOTE.sub("", row_label(cell)))
 
 
 def defined_metric(page, label, metric):
@@ -189,6 +198,7 @@ def table_operands(page, period, metric, citation, notes, note_citation):
         if len(cells) != 1:
             continue
         row_number, label, original = cells[0]
+        label = row_label(label)
         definition = defined_metric(page, label, metric)
         grouping = any(re.fullmatch(r"[+-]?\d{1,3}(?:,\d{3}){2,}(?:\.\d+)?", cell.strip())
                        for row in rows for cell in row)

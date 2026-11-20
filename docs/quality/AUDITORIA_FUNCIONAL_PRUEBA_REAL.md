@@ -487,3 +487,48 @@ Se solicitó aprobación para una única pasada externa K01–K12, máximo 12 ll
 Los JSONL, las mediciones de recursos y la copia congelada quedaron en `/tmp/p2-sprint-120`. **Recomendación** · Conservar `financial-local` para la próxima entrega. K apoya la mejora del detector y de la recuperación local en una muestra pequeña. DeepSeek real queda **NOT RUN**, por lo que la atribución y la recomendación de adopción del híbrido siguen **PARTIAL**.
 
 La verificación de cierre confirmó **97 pruebas Python y 5 subcasos**, **6 Chromium**, **14/14 financieros** con identidad de estado, texto, citas y herramientas frente al archivo histórico y 25/25 PNG, **11/11 de aceptación**, **28/28 de la ampliada** y **10/10 en B01–B10**. En la repetición del conjunto conocido posterior a la corrección, P06a volvió a PASS. Los archivos K de la versión archivada conservan las huellas `fa7a144887e6bdf51eb38bf6f6087a2afc65e92035636a34c0087275d64bebc4` y `195bd2d3c2bc011eddbd0a8e8e9fa53d1954991996aa692a063b65e9cc824692` para local y simulado respectivamente.
+
+## Rescate determinista local en la aplicación web
+
+La implementación partió de `5f9fd72` y conserva el flujo V3. `hybrid-experimental` selecciona `DeterministicPlanner` cuando el alcance externo está bloqueado. El planificador selecciona, mediante `Plan` y `Step`, los apartados concretos que el backend dejó pendientes. Usa los términos ya obtenidos por el detector y las herramientas locales. La salud de la API separa la disponibilidad del planificador local de la disponibilidad de un proveedor externo.
+
+Las cabeceras `X-Hybrid-Rescue-Activated`, `X-Hybrid-Sections-Attempted`, `X-Hybrid-Sections-Verified`, `X-Hybrid-Rescue-Ms` y `X-Hybrid-Decision` recogen activación, apartado, verificación, tiempo y desenlace de cada solicitud. Uvicorn registra esos datos por ID, sin preguntas, texto de fuentes ni credenciales. Se probó el arranque con un archivo de entorno que ofrece un proveedor remoto y una autorización externa. El modo bloqueado siguió local, sin configurar un cliente HTTP de proveedor. Ante timeout, plan inválido o evidencia insuficiente se conserva lo que el backend pudo verificar.
+
+Se corrigieron dos fallos de la lógica compartida. Al delimitar el indicador, el parser descarta el artículo que acompaña al conector de periodo en una fecha escrita. Al leer tablas, un encabezado de sección separado por salto de línea puede compartir la última celda de rótulo sin convertirse en parte del indicador. Cada operando sigue sujeto a las comprobaciones originales de periodo, fila, moneda, entidad y comparabilidad. En el híbrido, un informe de frecuencia solicitado en presente se verifica en el ejercicio más reciente dentro del alcance identificado. El diagnóstico de calendario explica una participación imposible y omite citas ajenas a esa razón.
+
+La batería visual se ejecutó por HTTP contra dos instancias FastAPI de la misma versión, con 2 CPU y 4 GiB cada una, los 24 PDF y el mismo índice SQLite. Las veinte preguntas se conservaron literalmente. La calificación inicial del usuario sigue figurando como observación visual provisional. Se cotejaron los documentos, páginas y celdas esperados antes de medir. [Oráculo literal](../../tests/financial/visual_regression.py) · [Evaluador](../../tests/financial/evaluate_hybrid.py) · [Arranque y reversión](../../README.md#rescate-determinista-en-la-demo-web)
+
+| ID | Visual previo | A · financial-local | B · Híbrido determinista | POST A/B (s) | Herramientas A/B | Desenlace en B |
+|---|---|---|---|---:|---:|---|
+| D01 | PASS | PASS | PASS | 0,701 / 0,617 | 5/5 | Definición conservada, informe anual p. 29. |
+| D02 | PASS | PASS | PASS | 0,618 / 0,717 | 5/5 | Tres políticas y alcance parcial conservados, p. 152. |
+| D03 | FAIL | FAIL | PASS | 0,330 / 0,685 | 5/11 | Rescate del CCL, p. 153. Acreditó activos líquidos, salidas netas, estrés y 30 días. |
+| D04 | FAIL | FAIL | PASS | 0,097 / 0,668 | 1/10 | Rescate de dos apartados, pp. 29–30 del informe anual. |
+| D05 | FAIL | FAIL | PASS | 0,053 / 0,334 | 1/8 | Rescate de los dos destinatarios y su frecuencia en 2025, p. 153. |
+| D06 | FAIL | FAIL | PASS | 0,112 / 0,184 | 1/4 | Rescate del alcance de las políticas de la Tenedora, p. 152. |
+| F01 | PASS | PASS | PASS | 4,394 / 4,425 | 10/10 | +220 millones y +1,57 %, p. 5 del informe trimestral. |
+| F02 | PASS | PASS | PASS | 6,402 / 6,401 | 11/11 | +0,7 puntos de ROE, notas comparables y páginas 6 conservadas. |
+| F03 | PASS | PASS | PASS | 3,183 / 3,029 | 20/20 | Conservados ambos cálculos y las cuatro celdas de la p. 7. |
+| F04 | PASS | PASS | PASS | 4,420 / 4,386 | 10/10 | 33,53 % de participación, p. 5. |
+| F05 | FAIL | PARTIAL | PASS | 4,464 / 9,121 | 10/20 | A acredita ROA. B añade ROE. +0,1 y +1,4 puntos, cuatro celdas en p. 6. |
+| F06 | PARTIAL | PARTIAL | PASS | 4,559 / 10,487 | 10/20 | B conserva +220 millones y añade −0,4 puntos de ROE. Cuatro celdas en pp. 5–6. |
+| F07 | PASS | PASS | PASS | 4,230 / 4,137 | 10/10 | Conservados +970 millones y +7,31 %, p. 5. |
+| F08 | FAIL | PASS | PASS | 1,495 / 1,553 | 10/10 | El parser compartido normaliza el periodo escrito. −101.624 millones de pesos, p. 7. |
+| S01 | PASS | PASS | PASS | 0,005 / 0,005 | 0/0 | Abstención por moneda sin respaldo. |
+| S02 | PASS | PASS | PASS | 0,006 / 0,006 | 0/0 | Abstención por saldo no aditivo. |
+| S03 | PASS | PASS | PASS | 5,935 / 5,953 | 11/11 | Abstención por entidad. |
+| S04 | PASS | PASS | PASS | 0,067 / 0,053 | 1/1 | Abstención por fecha futura sin evidencia. |
+| S05 | PASS | PASS | PASS | 4,708 / 4,873 | 10/10 | Abstención por desconsolidación de Bineo y ausencia de base común. |
+| S06 | PARTIAL | PARTIAL | PASS | 5,289 / 5,336 | 11/11 | Diagnóstico local de calendario. 4T25 queda fuera de 9M25. |
+
+A obtuvo **13 PASS, 3 PARTIAL y 4 FAIL**. B obtuvo **20 PASS** y preservó el texto, estado, citas, advertencias y herramientas de los 13 PASS de A con el planificador inactivo. Hubo seis rescates completos, cero rescates parciales y cero fallidos. F08 mejoró por el código compartido. S06 mejoró por diagnóstico local directo. El recuento estricto de verificaciones de contenido fue 44/62 en A y 62/62 en B. Se comprobaron 18/22 celdas en A y 22/22 en B.
+
+Todas las citas abrieron el PNG y se cotejaron en su página original. Se acreditaron **22/23** citas pertinentes en A y **31/31** en B. La cita adicional de A en S06 identifica un problema de perímetro real, ajeno a la inclusión temporal que se preguntó. Inicio, herramientas y resultados se registran en el JSONL por caso. Totales de herramientas A/B, 142/187. Mediana/P95/máximo de POST, **2,339/5,935/6,402 s** en A y **2,291/9,121/10,487 s** en B. Hubo cero llamadas, tokens, gastos y reservas externos.
+
+El archivo de 40 registros quedó en `/tmp/p2-deterministic.deb5u7/final/visual.jsonl` con SHA-256 `0245771b08604f0db5ecc69ef6b897c0f4f1c7b94f69d60cedf157c605c59be2`. La captura incluye respuestas, citas, decisión del detector, herramientas, verificaciones de evidencia y latencias. Las preguntas y oráculos se conservan en la prueba versionable. [Serie literal](../../tests/financial/visual_regression.py)
+
+La regresión de producción también pasó G01–G22 con 22 PASS, J01–J20 con 12 PASS, 4 PARTIAL y 4 FAIL, y K01–K12 con 11 PASS y 1 FAIL. Los 32 PASS de los controles locales de esas tres suites conservaron contenido, citas y herramientas sin rescate. G, J y K se tratan aquí como baterías conocidas. La suite Python pasó 103 pruebas y 5 subcasos, y Chromium P0 pasó 6 pruebas.
+
+Se activó `hybrid-experimental` en `p2banorte-api.service` sobre 8194, con alcance externo bloqueado, y Vite siguió en 5194. Chromium comprobó D05, F05 y S06 a través de esa web, incluyendo apertura real de las páginas 153 y 6 en los dos primeros casos. El log de la pasada A/B registra 20 eventos del híbrido y seis activaciones. La reversión reutiliza el servicio, el puerto y el mismo SQLite con `P2BANORTE_LOCAL_MODE=financial-local`. [Arranque y reversión](../../README.md#rescate-determinista-en-la-demo-web)
+
+El cierre adicional reprodujo 14/14 resultados financieros con 25/25 PNG e identidad de estado, respuesta, citas y pasos respecto del histórico. Pasaron 11/11 casos de aceptación, 28/28 de la ampliada y 10/10 de B01–B10. Los controles de integridad RCTF, PDF, SQLite y frontera Git pasaron.

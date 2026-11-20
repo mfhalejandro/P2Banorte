@@ -229,7 +229,7 @@ def parse_intent(question: str) -> Intent:
     periods = list(dict.fromkeys(local_period(match) for match in matches))
     prefix = request.indicator.strip(" ¿?!:,")
     prefix = re.sub(r"^(?:la|el|los|las)\s+", "", prefix, flags=re.I)
-    metric_entity = re.sub(r"\s+(?:respecto\s+al?|al\s+cierre\s+de|entre|del|de|en|para|al)\s*$", "", prefix, flags=re.I).strip()
+    metric_entity = re.sub(r"\s+(?:respecto\s+al?|al\s+cierre\s+de|entre|del|de|en|para|al)(?:\s+(?:el|la|los|las))?\s*$", "", prefix, flags=re.I).strip()
     metric_entity = re.sub(r"\s+trimestral(?=\s+de\s|$)", "", metric_entity, flags=re.I)
     unit_pattern = re.compile(
         rf"\s+(?:expresad[oa]s?\s+)?en\s+{CURRENCY.pattern}(?=$|\s+de\s+(?:grupo|banco|gfnorte)\b)", re.I,

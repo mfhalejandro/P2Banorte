@@ -1,5 +1,6 @@
 """Rescate selectivo. El motor local conserva la autoridad sobre evidencias y cálculos."""
 import asyncio
+import logging
 import re
 import sqlite3
 import unicodedata
@@ -10,21 +11,22 @@ from typing import Literal
 from uuid import uuid4
 
 import pymupdf
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .agent import ChatResponse, ProviderUnavailable, sentence_score
 from .corpus import (
     PDF_LOCK, Citation, SearchRequest, definition_topic, definition_under_heading,
-    documentary_query, indirect_definition, list_under_heading, page_lines, policy_scope, terms,
+    documentary_query, explanation_terms, indirect_definition, list_under_heading, page_lines, policy_scope, terms,
 )
 from .deepseek_config import USD_NANO
 from .deepseek_wire import UsageTotals
-from .hybrid_planner import FinanceConstraints
+from .hybrid_planner import DeterministicPlanner, FinanceConstraints, HybridPlanner, Plan
 from .finance import Abstain, check_stock_sum, normalize
 from .financial_agent import Trace, parse_intent, requires_financial_tools
 
 
 MODE = "híbrido experimental"
+LOGGER = logging.getLogger("uvicorn.error")
 DEADLINE = 15
 MAX_TOOLS = 24  # La operación local de dos monedas ya puede usar dos presupuestos de 12.
 DOC_READS = 4
@@ -74,6 +76,7 @@ class DocumentNeed(BaseModel):
     report: Literal["annual", "financial"] | None = None
     facets: tuple[tuple[str, ...], ...] = ()
     anchor: str | None = None
+    current_report: bool = False
 
     @property
     def keywords(self):
@@ -170,6 +173,8 @@ def document_needs(question):
             kind = "list" if normalize(topic).startswith("objetivos ") else (
                 "definition" if normalize(topic) in TOPIC_ALIASES else "passage"
             )
+        elif listing := explanation_terms(part):
+            topic, kind = " ".join(sorted(listing)), "list"
         elif re.search(r"\b(?:que|como|cuales|cual|quien|enumera|describe)\b", plain(part)):
             # Caso abierto. Las palabras que el plan seleccione solo orientan FTS.
             # El pasaje debe seguir acreditando todos los términos de contenido locales.
@@ -181,7 +186,8 @@ def document_needs(question):
         if not 2 <= len(words) <= 12 or len(topic) > 150:
             return []
         needs.append(DocumentNeed(topic=CANONICAL_TOPICS.get(normalize(topic), topic), kind=kind,
-                                  scope=scope, year=year, report=report, facets=facets, anchor=anchor))
+                                  scope=scope, year=year, report=report, facets=facets, anchor=anchor,
+                                  current_report=bool(scope and year is None and topic == "liquidez reportes")))
     return needs
 
 
@@ -368,6 +374,9 @@ def verified_passage(corpus, ref, need):
 class RequestBudget:
     deadline: float
     tools: list[str] = field(default_factory=list)
+    rescue_started: float | None = None
+    attempted: dict[int, str] = field(default_factory=dict)
+    verified: set[int] = field(default_factory=set)
 
     async def call(self, name, function, *args):
         if len(self.tools) >= MAX_TOOLS:
@@ -384,6 +393,11 @@ class HybridAgent:
         self.corpus = documentary.corpus
         self.planner = planner
         self.mode = MODE
+        self.planner_mode = (
+            "deterministic" if isinstance(planner, DeterministicPlanner)
+            else "external" if isinstance(planner, HybridPlanner)
+            else "in-process" if planner is not None else "none"
+        )
 
     async def answer(self, question, metrics):
         loop = asyncio.get_running_loop()
@@ -412,8 +426,17 @@ class HybridAgent:
         except (TimeoutError, ProviderUnavailable, KeyError, OSError, sqlite3.Error, RuntimeError):
             stage = "fallback"
         finally:
+            activated = budget.rescue_started is not None
+            rescue_ms = round((perf_counter() - budget.rescue_started) * 1000) if activated else 0
+            attempted = ",".join(f"{i}:{kind}" for i, kind in budget.attempted.items()) or "-"
+            verified = ",".join(str(i) for i in sorted(budget.verified)) or "-"
             metrics.update({
                 "X-Hybrid-Decision": stage,
+                "X-Hybrid-Planner": self.planner_mode,
+                "X-Hybrid-Rescue-Activated": str(int(activated)),
+                "X-Hybrid-Rescue-Ms": str(rescue_ms),
+                "X-Hybrid-Sections-Attempted": attempted,
+                "X-Hybrid-Sections-Verified": verified,
                 "X-Hybrid-Tools": str(len(budget.tools)),
                 "X-Hybrid-Local-Ms": str(round((original_time - start) * 1000)),
                 "X-Hybrid-Total-Ms": str(round((perf_counter() - start) * 1000)),
@@ -425,6 +448,9 @@ class HybridAgent:
                 "X-P2-DeepSeek-Usd-Upper": f"{totals.nano / USD_NANO:.9f}",
                 "X-P2-DeepSeek-Usd-Unconfirmed": f"{totals.reserved_unconfirmed / USD_NANO:.9f}",
             })
+            if self.planner_mode == "deterministic":
+                LOGGER.info("hybrid_rescue id=%s activated=%s attempted=%s verified=%s rescue_ms=%s outcome=%s",
+                            reply.request_id, int(activated), attempted, verified, rescue_ms, stage)
         return reply.model_copy(update={"provider_mode": MODE, "tools_used": budget.tools})
 
     async def ask(self, question, slots, totals, budget):
@@ -434,10 +460,15 @@ class HybridAgent:
             return None, "deadline"
         if len(budget.tools) + 2 > MAX_TOOLS:
             return None, "tool-budget"
-        async with asyncio.timeout_at(budget.deadline - 0.05):
-            plan = await self.planner.plan(question, slots, totals)
-        if plan is None:
-            return None, "out-of-scope"
+        budget.rescue_started = perf_counter()
+        try:
+            async with asyncio.timeout_at(budget.deadline - 0.05):
+                plan = await self.planner.plan(question, slots, totals)
+            if plan is None:
+                return None, "out-of-scope"
+            plan = Plan.model_validate(plan)
+        except ValidationError:
+            return None, "invalid-plan"
         allowed = {entry["slot"]: entry for entry in slots}
         chosen = {}
         for step in plan.subquestions:
@@ -470,8 +501,15 @@ class HybridAgent:
                 if not (whole.kind == "ytd" and part.kind == "quarter" and whole.year == part.year
                         and whole.end - whole.months <= part.end - part.months < part.end <= whole.end):
                     if "no está incluido" not in base.answer:
-                        note = "El trimestre no está incluido en el acumulado solicitado."
-                        return base.model_copy(update={"answer": f"{base.answer} {note}"}), "local-diagnostic"
+                        reason = (
+                            f"El trimestre {part.label} no está incluido en el acumulado solicitado {whole.label}."
+                            if whole.kind == "ytd" and part.kind == "quarter"
+                            else "La participación exige un trimestre incluido en un acumulado del mismo año."
+                        )
+                        return base.model_copy(update={
+                            "answer": f"No puedo calcular la participación. {reason}",
+                            "citations": [], "warnings": [],
+                        }), "local-diagnostic"
                 return base, "protected"
             if not comparable_periods(primary):
                 if "distinto tipo o duración" not in base.answer:
@@ -502,6 +540,7 @@ class HybridAgent:
             if not chosen:
                 return pending, stage
             trace = Trace()
+            budget.attempted[0] = "calculation"
             try:
                 async with asyncio.timeout_at(budget.deadline - 0.05):
                     result = await self.financial.run_intent(secondary, trace, MAX_TOOLS - len(budget.tools))
@@ -515,6 +554,7 @@ class HybridAgent:
             f"· {operand.entity}." in base.answer for operand in trace.result[:2]
         ):
             return pending, "unverified"
+        budget.verified.add(0)
         citations = list({cite.evidence_id: cite for cite in [*base.citations, *result.citations]}.values())
         keep = base if base.status == "answered" else self.partial(base, primary.metric)
         return keep.model_copy(update={
@@ -550,11 +590,19 @@ class HybridAgent:
             catalog = None
             for i, search_terms in chosen.items():
                 need = needs[i]
+                budget.attempted[i] = need.kind
                 documents = None
                 if need.scope or need.year or need.report:
                     if catalog is None:
                         catalog = await budget.call("list_documents", self.corpus.catalog)
-                    documents = {doc["doc_id"] for doc in catalog if report_scope(need, doc["filename"])}
+                    eligible = [doc for doc in catalog if report_scope(need, doc["filename"])]
+                    if need.current_report:
+                        years = {doc["doc_id"]: max((int(t) for t in terms(doc["filename"])
+                                                      if re.fullmatch(r"20\d{2}", t)), default=0)
+                                 for doc in eligible}
+                        most_recent = max(years.values(), default=0)
+                        eligible = [doc for doc in eligible if years[doc["doc_id"]] == most_recent]
+                    documents = {doc["doc_id"] for doc in eligible}
                 query = f"¿Cómo se define el {need.topic}?" if need.kind == "definition" else need.topic
                 refs = await budget.call("search_corpus", self.corpus.search_corpus,
                                          SearchRequest(query=query, documents=documents, top_k=8))
@@ -580,6 +628,7 @@ class HybridAgent:
                     citation = await budget.call("read_source", verified_passage, self.corpus, ref, need)
                     if citation:
                         covered[i] = citation
+                        budget.verified.add(i)
                         break
         except (TimeoutError, ProviderUnavailable, KeyError, OSError, sqlite3.Error, RuntimeError):
             stage = "fallback"

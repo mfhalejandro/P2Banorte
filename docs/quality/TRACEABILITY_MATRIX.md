@@ -112,3 +112,13 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | SPEC-002-AC-06 · Ablación externa K | Preparado con límite de gasto y lista exacta. Requiere autorización del alcance para esta pasada. | NOT RUN en este sprint. |
 
 [Auditoría, recursos y oráculos](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#sprint-de-generalización-híbrida)
+
+### Rescate determinista en la demo web
+
+| Criterio | Evidencia | Resultado |
+|---|---|---|
+| SPEC-001-AC-01/03/06 y SPEC-002-AC-01/02/03/05 | Producción con Plan y Step, verificación de apartados, dos comparaciones compuestas y apertura de PNG desde Vite. | VERIFIED en la batería de 20 preguntas, 20/20 y 31/31 citas pertinentes. |
+| T-10/T-11 · Frontera externa y fallback | Transporte y configuración remotos inalcanzables con alcance bloqueado. Pruebas de timeout, esquema inválido y abstenciones de moneda, calendario y perímetro. | VERIFIED, cero consumo externo. |
+| T-13 · Regresión conocida | Las variantes local e híbrida usaron el mismo corpus, índice y versión. B preservó 13/13 PASS de A en la batería visual. G, J y K también se reejecutaron. | VERIFIED en las baterías citadas. |
+
+[Comparación por ID, citas y latencias](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#rescate-determinista-local-en-la-aplicación-web)

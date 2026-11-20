@@ -277,6 +277,10 @@ def live(base, case, question):
                if key.lower().startswith("x-p2-deepseek-")}
     if metrics:
         row["consumo_deepseek"] = metrics
+    hybrid_metrics = {key.lower().removeprefix("x-hybrid-"): value for key, value in headers.items()
+                      if key.lower().startswith("x-hybrid-")}
+    if hybrid_metrics:
+        row["hibrido"] = hybrid_metrics
     for cite in row["citations"]:
         url = f'{base}/api/documents/{cite["doc_id"]}/pages/{cite["pdf_page"]}/image'
         try:

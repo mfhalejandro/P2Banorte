@@ -15,7 +15,7 @@ from .deepseek_fixture import HYBRID_QUESTIONS, synthetic_corpus
 from .deepseek_wire import DeepSeekHTTP
 from .financial_agent import FinancialAgent, requires_financial_tools
 from .hybrid_agent import HybridAgent
-from .hybrid_planner import HybridPlanner, planner_settings, question_hash, read_allowlist
+from .hybrid_planner import DeterministicPlanner, HybridPlanner, planner_settings, question_hash, read_allowlist
 
 
 async def configure_hybrid(app, stack, corpus, injected_planner, transport):
@@ -42,8 +42,9 @@ async def configure_hybrid(app, stack, corpus, injected_planner, transport):
         directory = stack.enter_context(TemporaryDirectory(prefix="p2-hybrid-fixture-"))
         corpus = synthetic_corpus(directory)
     app.state.corpus = corpus or Corpus.configured()
-    app.state.agent = HybridAgent(Agent(app.state.corpus, LocalExtractive()), FinancialAgent(app.state.corpus), planner)
-    app.state.hybrid_ready = planner is not None
+    app.state.hybrid_ready = isinstance(planner, HybridPlanner)
+    local_planner = planner if planner is not None else DeterministicPlanner()
+    app.state.agent = HybridAgent(Agent(app.state.corpus, LocalExtractive()), FinancialAgent(app.state.corpus), local_planner)
     app.state.external_data_scope = effective
     app.state.provider_available = True
     app.state.financial_enabled = False
@@ -113,6 +114,7 @@ def create_app(corpus=None, provider=None, financial_provider=None, *, deepseek_
         if app.state.hybrid_enabled:
             result["external_data_scope"] = app.state.external_data_scope
             result["external_provider_ready"] = app.state.hybrid_ready
+            result["planner"] = app.state.agent.planner_mode
         if app.state.deepseek_enabled:
             result["external_data_scope"] = app.state.external_data_scope
             result["external_provider_ready"] = app.state.deepseek_ready

@@ -114,6 +114,37 @@ curl -fsS http://127.0.0.1:8194/api/health
 
 Abre http://127.0.0.1:5194. Los dos servicios se pueden reiniciar por separado con `systemctl --user restart` seguido del nombre de la unidad. Para detener ambos, ejecuta `systemctl --user stop p2banorte-web.service p2banorte-api.service`. El arranque abre el índice existente directamente.
 
+## Rescate determinista en la demo web
+
+Deja Vite en 5194. La API usa el mismo puerto 8194 en ambos modos y abre el SQLite existente. Desde la raíz del repositorio, ejecuta este bloque con las rutas de la demo de 24 PDF.
+
+~~~bash
+export RAG_DATA_DIR="$PWD/docs/requirements/data"
+export RAG_STATE_DIR=/tmp/p2-slice002.w2abwN02/corpus-eval
+P2BANORTE_LOCAL_MODE=hybrid-experimental
+(
+  set -e
+  case "$P2BANORTE_LOCAL_MODE" in hybrid-experimental|financial-local) ;; *) exit 2 ;; esac
+  test -f "$RAG_STATE_DIR/corpus.sqlite3"
+  if systemctl --user is-active --quiet p2banorte-api.service; then
+    systemctl --user stop p2banorte-api.service
+  fi
+  for intento in $(seq 1 20); do
+    estado=$(systemctl --user show p2banorte-api.service -p LoadState --value 2>/dev/null || true)
+    if [ -z "$estado" ] || [ "$estado" = not-found ]; then break; fi
+    sleep 1
+  done
+  systemd-run --user --unit=p2banorte-api --collect --property="WorkingDirectory=$PWD" \
+    --setenv="LLM_PROVIDER=$P2BANORTE_LOCAL_MODE" --setenv="RAG_DATA_DIR=$RAG_DATA_DIR" \
+    --setenv="RAG_STATE_DIR=$RAG_STATE_DIR" --setenv=HYBRID_DEEPSEEK_SCOPE=blocked \
+    --setenv=DEEPSEEK_ALLOW_REAL_DATA=false --setenv=DEEPSEEK_SYNTHETIC=false \
+    "$PWD/.venv/bin/python" -B -m uvicorn apps.api.main:app --host 127.0.0.1 --port 8194
+)
+curl --retry 8 --retry-connrefused --retry-delay 1 -fsS http://127.0.0.1:5194/api/health
+~~~
+
+En el híbrido, salud informa `planner=deterministic` y `external_data_scope=blocked`. Las cabeceras `X-Hybrid-*` registran la activación, los apartados intentados y acreditados, el tiempo y el desenlace. La bitácora `journalctl --user -u p2banorte-api.service` registra esos datos por ID de solicitud. Para volver al modo anterior, repite el bloque con `P2BANORTE_LOCAL_MODE=financial-local`. Si Vite está detenido, inícialo con el comando de la sección anterior.
+
 ## DeepSeek en una instancia sintética aislada
 
 FastAPI usa DeepSeek Flash con el contrato Chat Completions, cinco funciones V3 y thinking desactivado. El modelo selecciona identificadores temporales de bloques. El backend valida referencias y comparabilidad, ejecuta Decimal y compone el texto a partir de resultados observados. El visor PNG sigue siendo local y la herramienta de inspección comprueba el render. [API oficial](https://api-docs.deepseek.com/en/) · [Tool calling](https://api-docs.deepseek.com/guides/tool_calls/)

@@ -16,11 +16,12 @@ from fastapi.testclient import TestClient
 
 from apps.api.deepseek_fixture import HYBRID_QUESTIONS
 from apps.api.hybrid_agent import MODE
-from apps.api.hybrid_planner import Plan, Step
+from apps.api.hybrid_planner import DeterministicPlanner
 from apps.api.main import create_app
 from evaluate_acceptance import OPERATIONS, PARAPHRASES, QUESTIONS, assess as acceptance, contains, live, table_cell
 from evaluate_adversarial import B_ORACLES, B_QUESTIONS, NEW, assess, inspect, original
 from hybrid_holdout import K, K_OPERANDS
+from visual_regression import DOCUMENTARY_EVIDENCE, OBSERVED, VISUAL, VISUAL_OPERANDS
 
 
 LIQUIDITY = "EEFF 2025 Grupo_.pdf"
@@ -139,13 +140,13 @@ def inspect_independent(root, cite):
     return checked
 
 
-class SimulatedPlanner:
+class SimulatedPlanner(DeterministicPlanner):
     def __init__(self):
         self.requests = Counter()
 
     async def plan(self, question, slots, totals):
         self.requests[question] += 1
-        return Plan(subquestions=[Step(slot=slot["slot"], search_terms=[]) for slot in slots])
+        return await super().plan(question, slots, totals)
 
 
 def test_row(client, case, question):
@@ -188,6 +189,46 @@ def score(root, row, oracle, label):
     return result
 
 
+def score_visual(root, row, oracle, label):
+    case = row["id"]
+    mode = MODE if label == "hybrid-local" else (
+        "extractivo local" if case.startswith("D") or case == "S04" else "financiero local (doble)"
+    )
+    result = assess(root, row, oracle, expected_mode=mode, citation_check=inspect_independent)
+    pages = {(filename, page) for filename, page, _ in oracle[2]}
+    matched = [(cite, check) for cite, check in zip(row["citations"], result["cotejo"], strict=True)
+               if all(check.values())]
+    operands = VISUAL_OPERANDS.get(case, set())
+    have = {tuple(item.strip() for item in cite["snippet"].split("|")) for cite, _ in matched
+            if (cite["filename"], cite["pdf_page"]) in pages}
+    documentary = DOCUMENTARY_EVIDENCE.get(case, [])
+    for cite, check in zip(row["citations"], result["cotejo"], strict=True):
+        source = cite["filename"], cite["pdf_page"]
+        check["pertinente"] = check["semantic"] and (
+            (source in pages and tuple(item.strip() for item in cite["snippet"].split("|")) in operands)
+            or any(source == (name, page) and any(contains(cite["snippet"], fact) for fact in facts)
+                   for name, page, facts in documentary)
+            # Una cifra observada con su celda también sirve como contexto de la abstención de perímetro.
+            or (case == "S05" and cite["snippet"].count("|") == 2
+                and " | 3T24 | " in cite["snippet"])
+        )
+    complete_documents = all(
+        any((cite["filename"], cite["pdf_page"]) == (name, page)
+            and all(contains(cite["snippet"], fact) for fact in facts) for cite, _ in matched)
+        for name, page, facts in documentary
+    )
+    if result["veredicto"] == "PASS" and (not operands <= have or not complete_documents):
+        result["veredicto"] = "PARTIAL"
+    if case.startswith("F") and result["veredicto"] == "PARTIAL" and "financial_calculator" not in row["tools_used"]:
+        result["veredicto"] = "FAIL"
+    if (case == "S06" and row["http"] == 200 and row["status"] == "abstained"
+            and "financial_calculator" not in row["tools_used"] and result["veredicto"] == "FAIL"):
+        result["veredicto"] = "PARTIAL"
+    result.update(execution=label, observado_visual=OBSERVED[case], comprobaciones=len(oracle[1]),
+                  celdas_acreditadas=len(operands & have), celdas_esperadas=len(operands))
+    return result
+
+
 def emit(value):
     print(json.dumps(value, ensure_ascii=False), flush=True)
 
@@ -210,7 +251,8 @@ def verify_health(base, mode, size, scope=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("suite", choices=("regression", "known-mock", "independent-local", "j-mock", "k-mock",
-                                               "check-oracles", "synthetic", "known-live", "k-live"))
+                                               "check-oracles", "synthetic", "known-live", "k-live", "visual-live",
+                                               "known-local", "j-local", "k-local"))
     parser.add_argument("--data", type=Path)
     parser.add_argument("--port", type=port, default=8196)
     parser.add_argument("--local-port", type=port, default=8197)
@@ -227,18 +269,38 @@ def main():
         parser.error("Se requiere el directorio de datos.")
     root = args.data.resolve(strict=True)
     if args.suite == "check-oracles":
-        for source in sorted({ref for _, _, _, refs in (INDEPENDENT | K).values() for ref in refs}):
+        cases = INDEPENDENT | K | VISUAL
+        for source in sorted({ref for _, _, _, refs in cases.values() for ref in refs}):
             filename, page, snippet = source
             if not original(root / filename, page, snippet):
                 raise SystemExit(f"Oráculo sin respaldo: {filename}, p. {page}.")
-        for case, expected in (REQUIRED_OPERANDS | K_OPERANDS).items():
+        for case, expected in (REQUIRED_OPERANDS | K_OPERANDS | VISUAL_OPERANDS).items():
             found = set()
-            for filename, page, _ in (INDEPENDENT | K)[case][3]:
+            for filename, page, _ in cases[case][3]:
                 with pymupdf.open(root / filename) as pdf:
                     found |= {operand for operand in expected if aligned(pdf[page - 1], *operand)}
             if found != expected:
                 raise SystemExit(f"Operandos fuera de contexto en {case}.")
-        emit({"oracle_count": len(INDEPENDENT) + len(K), "verified_sources": True, "verified_operands": True})
+        emit({"oracle_count": len(cases), "verified_sources": True, "verified_operands": True})
+        return
+    if args.suite == "visual-live":
+        local = f"http://127.0.0.1:{args.local_port}"
+        hybrid = f"http://127.0.0.1:{args.port}"
+        verify_health(local, "financiero local (doble)", 24)
+        with urlopen(hybrid + "/api/health", timeout=4) as response:
+            state = json.load(response)
+        if (state.get("provider_mode") != MODE or state.get("documents") != 24
+                or state.get("external_data_scope") != "blocked"
+                or state.get("planner") != "deterministic" or state.get("external_provider_ready") is not False):
+            parser.error("Se requiere un backend híbrido determinista con salida bloqueada.")
+        for case, (question, *oracle) in VISUAL.items():
+            for label, base in (("financial-local", local), ("hybrid-local", hybrid)):
+                row = live(base, case, question)
+                if label == "hybrid-local":
+                    usage = row.get("consumo_deepseek", {})
+                    if any(float(usage.get(key, -1)) != 0 for key in ("calls", "input", "output", "usd-upper")):
+                        raise SystemExit("Faltan métricas o se detectó consumo externo.")
+                emit(score_visual(root, row, oracle, label))
         return
     if args.suite in {"known-live", "k-live"}:
         if not args.authorized_real_data:
@@ -270,9 +332,9 @@ def main():
             return
         os.environ["LLM_PROVIDER"] = "hybrid-experimental"
         hybrid = stack.enter_context(TestClient(create_app(hybrid_planner=simulated))) if args.variant != "local" else None
-        cases = {"known-mock": NEW, "k-mock": K}.get(args.suite, INDEPENDENT)
+        cases = {"known-mock": NEW, "known-local": NEW, "k-mock": K, "k-local": K}.get(args.suite, INDEPENDENT)
         for case, (question, *oracle) in cases.items():
-            for label, client in (("financial-local", local), ("hybrid-mock" if simulated else "hybrid-blocked", hybrid)):
+            for label, client in (("financial-local", local), ("hybrid-mock" if simulated else "hybrid-local", hybrid)):
                 if client is None:
                     continue
                 row = score(root, test_row(client, case, question), oracle, label)
