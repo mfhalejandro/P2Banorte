@@ -20,4 +20,6 @@ Las instrucciones de instalación y ejecución se mantienen en el [README](../..
 
 **Intención operativa P01–P08, VERIFIED en la muestra.** Las ocho preguntas exactas pasaron en Chromium. Se conservaron las abstenciones por futuro, periodos incompatibles y saldo no aditivo. [Resultados y reproducción](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#generalización-lingüística-p01p08-sobre-d747950)
 
-**DeepSeek real sintético, VERIFIED.** FastAPI completó el ciclo de herramientas con deepseek-flash sin thinking y pasó 10/10 en la batería final. El uso sobre corpus real continúa NOT RUN y bloqueado por configuración. La demo de 24 PDF conserva financial-local. [Evidencia y límites](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#deepseek-real-sobre-un-corpus-sintético--a-partir-de-2fab9ef)
+**DeepSeek real sintético, VERIFIED.** FastAPI completó el ciclo de herramientas con deepseek-flash sin thinking y pasó 10/10 en la batería final. La demo de 24 PDF conserva financial-local. [Evidencia y límites](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#deepseek-real-sobre-un-corpus-sintético--a-partir-de-2fab9ef)
+
+**Evaluación A/B G01–G22, VERIFIED en la pasada autorizada.** Financial-local reprodujo 16/22 y DeepSeek obtuvo 7/22, con tres fallos operativos. Generalización PARTIAL. La comparación favorece mantener financial-local para la prueba real. Las dos instancias temporales se detuvieron. DeepSeek fuera de la muestra autorizada queda NOT RUN. [Comparación y límites](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#evaluación-ab-g01g22)

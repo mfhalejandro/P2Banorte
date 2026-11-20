@@ -284,3 +284,67 @@ La columna local reproduce el archivo histórico y no es una ejecución A/B bajo
 | G22 | PASS | NOT RUN | — | 4.535 | — | Referencia congelada. |
 
 Resultado local histórico: 16 PASS, 1 PARTIAL, 5 FAIL y 72,73 % completos. Sin resultados pareados, diferencia de exactitud, errores financieros comparativos, calidad de citas, coste y rendimiento A/B quedan sin medir. No hay evidencia para afirmar que DeepSeek supera la referencia. Hasta acreditar los permisos y ejecutar la comparación, se conserva financial-local para la prueba real.
+
+## Evaluación A/B G01–G22
+
+**2026-11-19 18:33–18:36 CDMX · Comparación completada.** Se ejecutó la única pasada autorizada para G01–G22. El propietario autorizó DeepSeek Flash sin thinking en `https://api.deepseek.com`, con las preguntas literales, los pasajes necesarios de los informes financieros públicos y los resultados de herramientas asociados. El permiso excluyó PDF completos, imágenes, RCTF, secretos, credenciales como contenido de evaluación, rutas internas y otros documentos. El techo acumulado autorizado fue USD 1,00 en el ledger original. La autorización se limitó a esta ejecución.
+
+HEAD y origin/main coincidían en `e2f3abb`, con árbol e índice Git limpios. Los únicos cambios publicados desde `5df777b` eran dos documentos. Ambas instancias usaron el mismo código, las mismas preguntas y oráculos congelados, los mismos 24 PDF y el mismo SQLite de 34.662 fragmentos. El SHA-256 del SQLite se conservó en `e08e4ba182a7476c825faba360d50c4fae101ce1a10b58b58689779c1b4acf6d`. Pasaron integridad RCTF y control de las dos especificaciones.
+
+El [evaluador existente](../../tests/financial/evaluate_deepseek.py) ejecutó `independent` en dos FastAPI de loopback, local en 8197 y DeepSeek en 8196. Alternó un POST local y uno DeepSeek por ID, en orden G01–G22. La protección temporal de entrada permitió una solicitud por pregunta literal e instancia. `/api/health` confirmó 24 documentos y el modo de cada instancia. Cada unidad tenía cgroups de 2 CPU y 4 GiB. DeepSeek tuvo una solicitud en vuelo, 15 s por consulta, 6 s por llamada, 6 llamadas, 5 rondas y 12 usos de herramienta por consulta, y hasta 12.000/384 tokens de entrada/salida por llamada. El evaluador completó 44 POST en una ventana de 3 min 21 s desde el inicio de las unidades hasta su parada. El índice y los PDF eran compartidos y la caché del sistema operativo estaba disponible. El orden local primero pudo favorecer la lectura posterior. No se controló el caché del proveedor ni hubo repeticiones.
+
+| Métrica | financial-local | DeepSeek |
+|---|---:|---:|
+| PASS completo sobre 22 | 16/22 (72,73 %) | 7/22 (31,82 %) |
+| PARTIAL | 1 | 3 |
+| FAIL de exactitud en HTTP 200 | 5 | 9 |
+| Error operativo HTTP 503 | 0 | 3 |
+| Coincidencias con comprobaciones del oráculo | 30/40 | 19/40 |
+| Citas accesibles vía PNG | 25/25 | 16/16 |
+| Presencia en la página física correcta | 25/25 | 16/16 |
+| Cotejo automático de texto/celda | 25/25 | 16/16 |
+| Citas que aportan evidencia a un apartado solicitado, revisión contextual | 25/25 (100 %) | 9/16 (56,25 %) |
+| Mediana / P95 / máximo POST (s) | 1,296 / 6,336 / 8,571 | 7,013 / 9,773 / 11,786 |
+| CPU acumulada / RAM pico por unidad | 56,92 s / 131,5 MiB | 48,72 s / 133,2 MiB |
+| Llamadas externas | 0 | 98 |
+| Tokens de entrada / salida | 0 / 0 | 175.128 / 9.004 |
+| Incremento estimado del ledger (USD) | 0 | 0,0633432 |
+
+P95 por rango más próximo con 22 observaciones. Las latencias incluyen los 503 y excluyen la apertura posterior de los PNG. Los 40 controles de contenido contabilizan frases congeladas, no apartados independientes verificados. El veredicto también considera estado y fuentes obligatorias. G05 coincidió con sus tres frases, pero conservó PARTIAL porque faltó la fuente del oráculo. La tasa sobre las 19 respuestas HTTP 200 de DeepSeek fue 7/19 (36,84 %). Su disponibilidad en esta prueba fue 19/22. El JSONL congelado conserva los tres 503 bajo la etiqueta FAIL del evaluador. En la tabla comparativa se presentan como errores operativos de protocolo, sin cambiar el denominador de 22 intentos ni el número de PASS.
+
+Para el cotejo contextual se pidió que cada cita sostuviera al menos un apartado solicitado, incluida su entidad o periodo. Las tres citas de G02 hablan de reportes de incumplimiento y no definen riesgo de crédito. G03 aporta contexto regulatorio, mas no la definición de la Tenedora. G06–G07 documentan solo el listado y sus respuestas omiten la conclusión sobre alcance. La nota de Bineo en G12 corresponde a la comparación con 3T25, no a los dos trimestres de 2024 pedidos. En G05 las citas aportan objetivos y una explicación técnica del CCL, con otra fuente y cobertura incompleta. Estas constataciones no cambian el veredicto congelado. La tasa por cita no mide los apartados que quedaron sin citar.
+
+| ID | Local | DeepSeek | Cambio | POST L/D (s) | Citas L/D | Observación |
+|---|---|---|---|---:|---:|---|
+| G01 | FAIL | FAIL | Igual | 0,132 / 1,087 | 0/0 | Sin definición indirecta. DeepSeek dejó de avanzar. |
+| G02 | PASS | FAIL | Baja | 0,646 / 3,091 | 1/3 | Citó menciones de impago sin definir el riesgo. |
+| G03 | FAIL | PARTIAL | Mejora parcial | 0,321 / 3,521 | 0/1 | Recuperó la finalidad regulatoria del CCL. Faltó la definición de la Tenedora. |
+| G04 | PASS | PARTIAL | Baja | 0,188 / 5,173 | 2/1 | Citó tres políticas. Omitió las medidas y arrastró el folio 150. |
+| G05 | FAIL | PARTIAL | Mejora parcial | 0,074 / 3,445 | 0/3 | Recuperó objetivos y explicación del CCL sin la fuente exigida. |
+| G06 | PASS | FAIL | Baja | 0,145 / 4,956 | 1/1 | Enumeró políticas y omitió el juicio de exhaustividad. |
+| G07 | PASS | FAIL | Baja | 0,340 / 4,102 | 1/1 | Omitió delimitar qué acredita el apartado sobre el Grupo. |
+| G08 | PASS | PASS | Igual | 3,432 / 6,993 | 2/2 | 39.375 → 42.464 millones MXN, +7,85 %. |
+| G09 | PASS | FAIL | Baja | 4,743 / 7,033 | 2/0 | La selección de tablas impidió acreditar moneda común. Omitió +220 millones MXN y +1,57 %. |
+| G10 | PASS | OPERATIVO 503 | Error | 2,977 / 8,252 | 4/0 | Cierre inválido. Local dio −101.624 millones MXN y −8.461 millones USD. |
+| G11 | PASS | PASS | Igual | 6,336 / 7,365 | 2/2 | ROE 22,9 % → 23,6 %, +0,7 puntos porcentuales. |
+| G12 | PARTIAL | FAIL | Baja | 4,102 / 8,064 | 2/1 | Local acreditó +220 millones MXN. DeepSeek omitió utilidad y ROE, y citó fuera del periodo. |
+| G13 | PASS | FAIL | Baja | 4,244 / 7,364 | 2/0 | Omitió la participación válida de 33,01 %. |
+| G14 | PASS | PASS | Igual | 3,649 / 7,067 | 2/0 | Abstención correcta: 4T24 queda fuera del acumulado. |
+| G15 | FAIL | FAIL | Igual | 0,992 / 7,179 | 0/0 | Abstención sin explicar trimestre frente a acumulado. |
+| G16 | PASS | OPERATIVO 503 | Error | 0,005 / 11,786 | 0/0 | Cierre inválido al sumar capital contable entre cortes. |
+| G17 | PASS | OPERATIVO 503 | Error | 0,007 / 9,773 | 0/0 | Cierre inválido al sumar activos entre cortes. |
+| G18 | PASS | PASS | Igual | 1,599 / 6,048 | 0/0 | Abstención correcta: no hay respaldo para euros. |
+| G19 | FAIL | PASS | Mejora completa | 8,571 / 8,958 | 0/0 | Explicitó discrepancia de entidad para Banco Aurora. |
+| G20 | PASS | FAIL | Baja | 4,303 / 7,460 | 2/0 | Detectó escala sin respaldo y omitió la escala acreditada. |
+| G21 | PASS | PASS | Igual | 0,116 / 5,376 | 0/0 | Abstención correcta sobre política futura. |
+| G22 | PASS | PASS | Igual | 4,319 / 4,463 | 2/1 | Abstención por Bineo y falta de base común. |
+
+La diferencia sobre la muestra y frente al 16/22 histórico es **−9 PASS y −40,91 puntos porcentuales**. De los cinco FAIL históricos, G19 pasó, G03 y G05 quedaron PARTIAL, y G01 y G15 siguieron en FAIL. El PARTIAL histórico G12 bajó a FAIL. De los 16 PASS locales, seis se conservaron, siete bajaron a resultados HTTP 200 incompletos y tres terminaron en error operativo. El cotejo de los resultados emitidos no encontró montos inventados, cambios de signo, conversiones de moneda ni sumas de stock publicadas. Sí hubo una advertencia fuera de contexto en G12, falta de resolución de varias operaciones acreditables y tres cierres inválidos. En G10, G16 y G17 no hay resultado financiero de DeepSeek para juzgar.
+
+Se conciliaron USD 0,0671967 previos + USD 0,0633432 de esta pasada = **USD 0,1305399 acumulados**, sin reservas pendientes, sobre el ledger original. Quedaron USD 0,8694601 bajo el techo temporal. Es una cota conservadora a tarifa sin descuento por caché y no un cargo conciliado con la factura del proveedor. [Tarifa utilizada](https://api-docs.deepseek.com/quick_start/pricing/)
+
+Se detuvieron ambas unidades temporales. Se confirmó el bloqueo explícito con `DEEPSEEK_ALLOW_REAL_DATA=false` sin red. El valor preexistente en el `.env` global era `true` y el archivo se preservó. Las ejecuciones posteriores necesitan un `false` explícito cuando se use el adaptador sin nueva autorización. La demo de 24 PDF siguió en financial-local con API y frontend operativos. El permiso de esta pasada no es reutilizable. La retención efectiva y el uso posterior de datos en esta cuenta siguen sin acreditarse. La autorización del propietario se limitó a informes identificados como públicos y no constituye verificación independiente de permisos de terceros. Se verificó el ámbito de la instancia y el tipo de datos por el contrato del adaptador. No se capturaron los cuerpos HTTP salientes. [Condiciones de la plataforma](https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html) · [Privacidad de la plataforma](https://cdn.deepseek.com/policies/zh-CN/deepseek-open-platform-privacy-policy.html)
+
+**VERIFIED** ejecución de la A/B, tool calling real en la muestra autorizada y reproducción de los 16 PASS locales. **PARTIAL** generalización de ambos modos, con cobertura y fiabilidad inferiores de DeepSeek en esta muestra. **NOT RUN** inferencia sobre otras preguntas reales, producción, concurrencia y entorno final. La meta interna de 20/22 no se alcanzó. Con 22 casos, una pasada y variabilidad ya observada en sintéticos, la recomendación para la prueba real es mantener **financial-local**.
+
+El JSONL de 44 filas quedó en el temporal privado `/tmp/p2-ab.Ny33R7ie/results.jsonl`, SHA-256 `728d59e2ee2537788e89f5aad64a3cc20bbb7b93f6402f296b4e0a8db0c6ca9d`. Registra la pregunta literal, la respuesta, el modo, herramientas, abstenciones, citas y consumo por ID. La ejecución usó `tests/financial/evaluate_deepseek.py independent` con `--port 8196 --comparison-local-port 8197 --authorized-real-data --data <directorio del corpus>`. La bandera solo correspondía a la pasada autorizada. No se cambió el código ni se actualizó el resultado histórico del simulacro.

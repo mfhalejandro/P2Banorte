@@ -162,3 +162,9 @@ FastAPI completó tres baterías reales con 10/10, 8/10 y 10/10. La ejecución f
 ## 2026-11-19T18:24-06:00 CDMX · Preflight A/B y autorización pendiente
 
 Codex comprobó 5df777b, integridad RCTF, 24 PDF, SQLite, 22 oráculos congelados y servicios de loopback. Pasaron las 12 pruebas de MockTransport. .env ya indicaba true para corpus real, con el proveedor inactivo, y se dejó intacto. El ledger original confirmó USD 0,0671967 acumulados. La salida queda pendiente de derechos, retención, autorización expresa y techo de gasto. NOT RUN para la nueva A/B. [Evidencia y solicitud](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#preflight-ab-g01g22-sobre-5df777b)
+
+## 2026-11-19 18:33–18:36 CDMX · Evaluación A/B G01–G22
+
+Codex reanudó en `e2f3abb`, alineado con origin/main y con árbol e índice limpios. Los cambios publicados desde la línea base de DeepSeek `5df777b` eran exclusivamente documentales. Pasaron los controles RCTF y de especificaciones. Coincidieron las huellas del corpus y del SQLite existente. El propietario autorizó una sola pasada G01–G22 con informes públicos y un techo acumulado de USD 1,00 en el ledger original.
+
+Las dos unidades loopback con 2 CPU y 4 GiB ejecutaron `tests/financial/evaluate_deepseek.py independent` sobre los mismos oráculos. Local reprodujo 16/22. DeepSeek logró 7/22 y tuvo tres 503 de cierre inválido, diferenciados de los nueve FAIL de calidad. Se registraron 98 llamadas y USD 0,0633432 estimados, con USD 0,1305399 acumulados conciliados. Se detuvieron las dos unidades temporales. La demo permanente siguió en modo local. La configuración global se preservó, incluido el valor preexistente de `DEEPSEEK_ALLOW_REAL_DATA`, y se comprobó offline el bloqueo al declarar `false` explícitamente. [Resultados, cotejos y límites](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#evaluación-ab-g01g22)

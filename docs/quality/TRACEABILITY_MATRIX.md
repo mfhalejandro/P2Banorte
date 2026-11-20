@@ -83,3 +83,12 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | Frontera de inferencia y corpus real | Chat bloqueado con la política desactivada, cero llamadas en la prueba simulada, modo sintético separado. Evaluadores G01–G22 y H01–H08 preparados. | Política VERIFIED. Evaluación real NOT RUN. |
 
 [Resultados y métricas](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#deepseek-real-sobre-un-corpus-sintético--a-partir-de-2fab9ef)
+
+### Comparación A/B G01–G22 posterior al simulacro
+
+| Criterio | Evidencia | Estado |
+|---|---|---|
+| T-13 · Generalización independiente | Misma versión, oráculos y corpus. Local 16/22 y DeepSeek 7/22, con tres HTTP 503 separados del fallo de calidad. | PARTIAL, recomendación de mantener financial-local. |
+| SPEC-002-AC-06 · Proveedor real | Tool calling desde FastAPI con DeepSeek Flash. Una pasada G01–G22 autorizada, comparación de citas, 98 llamadas y ledger conciliado. | VERIFIED en el alcance autorizado. Fuera de esa muestra está NOT RUN. |
+
+[Resultados, controles y limitaciones](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#evaluación-ab-g01g22)
