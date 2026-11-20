@@ -157,3 +157,8 @@ Reanudación en d747950 con HEAD y origin/main alineados y el índice Git limpio
 Codex verificó HEAD, origin/main, árbol limpio, originales, 24 PDF e índice confirmado. El entorno cargó .env con permisos 0600, excluido de Git. Se mantuvo la demo local y se levantó una unidad temporal en loopback con corpus generado por el backend. Se autorizó únicamente DeepSeek Flash con datos ficticios. La revisión automática rechazó la invocación que contenía la bandera de corpus real y no se ejecutó esa parte. El bloqueo se comprobó con transporte simulado y sin llamadas.
 
 FastAPI completó tres baterías reales con 10/10, 8/10 y 10/10. La ejecución final confirmó tool calling, Decimal, citas y control de instrucciones del PDF. Los dos cierres inválidos de la segunda batería motivaron una recuperación parcial conservadora cuando ya existen fuentes verificadas. Se emplearon 117 llamadas, 188.985 tokens de entrada y 8.751 de salida, con USD 0,0671967 estimados como cota. Se detuvo solo la unidad de pago. [Resultados, controles y comandos](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#deepseek-real-sobre-un-corpus-sintético--a-partir-de-2fab9ef)
+
+
+## 2026-11-19T18:24-06:00 CDMX · Preflight A/B y autorización pendiente
+
+Codex comprobó 5df777b, integridad RCTF, 24 PDF, SQLite, 22 oráculos congelados y servicios de loopback. Pasaron las 12 pruebas de MockTransport. .env ya indicaba true para corpus real, con el proveedor inactivo, y se dejó intacto. El ledger original confirmó USD 0,0671967 acumulados. La salida queda pendiente de derechos, retención, autorización expresa y techo de gasto. NOT RUN para la nueva A/B. [Evidencia y solicitud](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#preflight-ab-g01g22-sobre-5df777b)

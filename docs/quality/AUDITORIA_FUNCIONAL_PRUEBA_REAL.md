@@ -229,3 +229,58 @@ Las suites de corpus real quedaron preparadas para G01–G22 y ocho preguntas nu
 La regresión final con LLM_PROVIDER=financial-local reprodujo 14/14 casos financieros con 25/25 PNG, 11/11 de aceptación, 28/28 de la ampliación y B01–B10 con 10/10. Pasaron 68 pruebas Python, 5 subcasos y 6 pruebas Chromium. Se conserva el aviso conocido de Starlette. Las huellas de los 24 PDF coincidieron con el manifiesto y con el índice de 34.662 fragmentos. También pasaron el lock offline, el control de especificaciones y la frontera Git.
 
 **Archivos de esta entrega.** El punto de entrada está en apps/api/main.py. El adaptador, configuración, fixtures y protocolo HTTP están en apps/api/deepseek_agent.py, apps/api/deepseek_config.py, apps/api/deepseek_fixture.py y apps/api/deepseek_wire.py. HTTPX pasó de desarrollo al backend en pyproject.toml y uv.lock. Se modificaron los evaluadores tests/financial/evaluate_acceptance.py y tests/financial/evaluate_adversarial.py. Se añadieron tests/financial/evaluate_deepseek.py y tests/financial/test_deepseek.py. La configuración se documenta en README.md y los registros actualizados son esta auditoría, TRACEABILITY_MATRIX.md, EXECUTION_LOG.md y PROGRESS.md.
+
+
+## Preflight A/B G01–G22 sobre 5df777b
+
+**2026-11-19T18:24-06:00 CDMX · NOT RUN sobre corpus real.** Se comprobó HEAD y origin/main en 5df777b con árbol e índice Git limpios al reanudar. La integridad confirmó los ocho RCTF, los 24 PDF y el SQLite de 34.662 fragmentos. Se conservaron código, criterios y fuentes. No se ejecutó otra pasada G01–G22 en ninguno de los proveedores, no se transmitieron datos del corpus y no se movió el ledger.
+
+- G01–G22 coincide con el bloque NEW de la copia congelada cuya huella de archivo es e5b4a27d9ad3551590f1905ed36f6da80d92d7c524b7879f98f0fa7b5878f8c2. El árbol sintáctico del bloque NEW coincide, SHA-256 3afb5fbef79046289efc91650c7326702efb542037c0b92ea66db58eaaec5e8a. Se cotejaron los diez pasajes de referencia del oráculo contra los originales.
+- La clave se cargó de .env con permisos 0600 y exclusión Git, sin mostrarla. La lectura detectó DEEPSEEK_ALLOW_REAL_DATA=true ya presente en la configuración. No se alteró ese ajuste ni arrancó DeepSeek. Solo estaban activos Vite y FastAPI local, con HTTP 200 en frontend, salud financiera local y visor PNG.
+- Pasaron las 12 pruebas del adaptador con MockTransport. El evaluador exige ámbito autorizado en /api/health y la bandera explícita antes de enviar preguntas reales. La versión usa coincidencias de frases como aproximación a apartados y puede etiquetar un 503 como FAIL. Además, la comprobación automática de pares de celdas obligatorios está definida para casos B específicos, no para todos los G. Deben conservarse los JSONL congelados y revisar por separado fallos operativos, omisiones y operandos con los mismos criterios en ambas columnas. El evaluador y el agente quedaron intactos.
+
+### Registro de gasto y solicitud de autorización
+
+Se abrió en solo lectura el registro original del experimento anterior. Saldo registrado acumulado USD 0,0671967, frente al límite USD 0,10. Las tres capturas históricas concilian el importe y registran cero reservas sin confirmar. El ledger conserva un total único y no separa reservas históricas; el saldo local disponible es USD 0,0328033. El archivo de la ruta predeterminada no existe, por lo que una ejecución autorizada debe apuntar al original sin crearlo de nuevo ni trasladar su saldo. El saldo comercial de la cuenta del proveedor no fue consultado.
+
+| Alcance propuesto, pendiente | Condiciones |
+|---|---|
+| Destino y finalidad | https://api.deepseek.com, deepseek-flash sin thinking, evaluación de exactitud y generalización de G01–G22 sobre 5df777b. |
+| Datos autorizables | Preguntas literales G01–G22 y solo fragmentos imprescindibles, operandos verificados y resultados de herramientas asociados, incluido el contexto necesario que la API reenvía en rondas posteriores. |
+| Exclusiones | PDF completos, PNG, RCTF, instrucciones privadas del arnés, rutas internas, registros confidenciales y secretos del corpus. La clave del proveedor se usa en la cabecera de autenticación. |
+| Pasadas y condiciones | Un intento por cada pregunta en cada proveedor, sin repeticiones. Dos FastAPI de loopback, cada uno con 2 CPU y 4 GiB. Mismo corpus, índice, versión y oráculos. El evaluador intercala local y DeepSeek por ID, de forma secuencial. Registrar el posible efecto de caché y distinguir gasto estimado de facturación. |
+| Límites | Hasta 22 POST hacia la instancia DeepSeek y 132 llamadas externas. Hasta 6 llamadas externas, 5 rondas, 12 herramientas, 12.000 tokens de entrada y 384 de salida por llamada, una solicitud en vuelo, 6 s por llamada y 15 s por consulta. |
+| Presupuesto | Cota incremental USD 0,5360256 con 132 llamadas al máximo y tarifas de punta sin caché. La extrapolación del sintético es USD 0,04927758 y también excede el saldo actual. Propuesta de techo acumulado USD 0,61 en el mismo registro, con USD 0,5428033 disponibles. El aumento requiere aprobación expresa y se aplicaría solo a la unidad temporal. [Tarifas](https://api-docs.deepseek.com/quick_start/pricing/) |
+| Vigencia y reversión | Una pasada pareada en una ventana de hasta 20 minutos desde habilitación, con cierre al terminar, al vencer o ante fallo operativo. Conservar respuestas parciales y ledger, detener unidades temporales y dejar las ejecuciones posteriores en modo local o con egress deshabilitado. La parada local no revoca datos que ya hayan salido. |
+| Derechos y tratamiento | El PRD identifica los informes como públicos. Los términos de Banorte protegen su contenido y no se acreditó un permiso aplicable a esta transferencia. La política de Open Platform consultada contempla tratamiento de entradas y salidas y posible uso para mejora o entrenamiento bajo sus condiciones salvo acuerdo escrito. No quedó acreditada la política aplicable a esta cuenta ni el plazo de retención de preguntas, fragmentos y resultados. Se requiere confirmación del titular competente y evidencia del tratamiento aceptado, incluida retención y uso posterior. [Términos de Banorte](https://www.banorte.com/GFB/Aviso-de-Privacidad-Integral/Terminos-Legales.html) · [Términos DeepSeek Open Platform](https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html) · [Privacidad DeepSeek Open Platform](https://cdn.deepseek.com/policies/zh-CN/deepseek-open-platform-privacy-policy.html) |
+
+### Referencia histórica y comparación pendiente
+
+La columna local reproduce el archivo histórico y no es una ejecución A/B bajo 2 CPU y 4 GiB. Mediana 1,344 s, P95 6,041 s y máximo 8,848 s en la referencia. Las 25 citas emitidas pasaron accesibilidad, texto y respaldo semántico según el cotejo registrado. El objetivo de 20/22 es una meta interna. En el ensayo sintético previo se observó variabilidad de 10/10, 8/10 y 10/10 entre ejecuciones, incluida una corrección de cierre entre la segunda y la última.
+
+| ID | Local histórico | DeepSeek | Mejora o regresión | Latencia local histórica (s) | Latencia DeepSeek | Observación |
+|---|---|---|---|---:|---:|---|
+| G01 | FAIL | NOT RUN | — | 0.191 | — | Definición indirecta sin recuperación. |
+| G02 | PASS | NOT RUN | — | 0.582 | — | Referencia congelada. |
+| G03 | FAIL | NOT RUN | — | 0.328 | — | CCL de la Tenedora no acreditado en la respuesta. |
+| G04 | PASS | NOT RUN | — | 0.212 | — | Referencia congelada. |
+| G05 | FAIL | NOT RUN | — | 0.080 | — | No separó objetivos y explicación del CCL. |
+| G06 | PASS | NOT RUN | — | 0.141 | — | Referencia congelada. |
+| G07 | PASS | NOT RUN | — | 0.348 | — | Referencia congelada. |
+| G08 | PASS | NOT RUN | — | 3.837 | — | Referencia congelada. |
+| G09 | PASS | NOT RUN | — | 4.346 | — | Referencia congelada. |
+| G10 | PASS | NOT RUN | — | 2.853 | — | Referencia congelada. |
+| G11 | PASS | NOT RUN | — | 6.041 | — | Referencia congelada. |
+| G12 | PARTIAL | NOT RUN | — | 4.135 | — | Calculó utilidad neta y omitió ROE. |
+| G13 | PASS | NOT RUN | — | 4.211 | — | Referencia congelada. |
+| G14 | PASS | NOT RUN | — | 3.646 | — | Referencia congelada. |
+| G15 | FAIL | NOT RUN | — | 0.941 | — | La entidad quedó incorporada en el indicador. |
+| G16 | PASS | NOT RUN | — | 0.010 | — | Referencia congelada. |
+| G17 | PASS | NOT RUN | — | 0.015 | — | Referencia congelada. |
+| G18 | PASS | NOT RUN | — | 1.747 | — | Referencia congelada. |
+| G19 | FAIL | NOT RUN | — | 8.848 | — | Abstención segura con diagnóstico de columna en vez de entidad. |
+| G20 | PASS | NOT RUN | — | 4.614 | — | Referencia congelada. |
+| G21 | PASS | NOT RUN | — | 0.074 | — | Referencia congelada. |
+| G22 | PASS | NOT RUN | — | 4.535 | — | Referencia congelada. |
+
+Resultado local histórico: 16 PASS, 1 PARTIAL, 5 FAIL y 72,73 % completos. Sin resultados pareados, diferencia de exactitud, errores financieros comparativos, calidad de citas, coste y rendimiento A/B quedan sin medir. No hay evidencia para afirmar que DeepSeek supera la referencia. Hasta acreditar los permisos y ejecutar la comparación, se conserva financial-local para la prueba real.
