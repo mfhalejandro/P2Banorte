@@ -292,7 +292,8 @@ def balance_operand(page, period, other, metric, citation, notes, note_citation)
                     "evidence_id": f"{scope}:{line}:{column}", "snippet": f"{label} | {period.label} | {original}",
                 })
                 candidates.append(make_operand(evidence, metric, period, original, context, notes, scope,
-                                               bool(re.search(r"\d{1,3}(?:,\d{3}){2}", lines[line])), note_citation))
+                                               any(re.search(r"\d{1,3}(?:,\d{3}){2}", row)
+                                                   for row in lines[header + 1:line + 1]), note_citation))
     if len(candidates) > 1:
         raise Abstain("Varios encabezados pueden corresponder a la fila del balance.")
     return candidates[0] if candidates else None

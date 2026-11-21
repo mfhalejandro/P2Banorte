@@ -7,11 +7,10 @@ import unicodedata
 from dataclasses import dataclass, field, replace
 from datetime import date
 from time import perf_counter
-from typing import Literal
 from uuid import uuid4
 
 import pymupdf
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import ValidationError
 
 from .agent import ChatResponse, ProviderUnavailable, sentence_score
 from .corpus import (
@@ -22,8 +21,9 @@ from .currency_request import verify_currency_request
 from .deepseek_config import USD_NANO
 from .deepseek_wire import UsageTotals
 from .hybrid_planner import DeterministicPlanner, FinanceConstraints, HybridPlanner, Plan
-from .finance import Abstain, PERIOD, check_stock_sum, normalize
+from .finance import Abstain, PERIOD, check_periods, check_stock_sum, normalize
 from .financial_agent import CURRENCY, ENTITY_NAME, METRIC, Trace, normalize_periods, parse_intent, requires_financial_tools
+from .query_interpretation import DocumentNeed, MARKER_LEAD, QueryInterpretation, QueryPart, QuerySpan, TOPIC_ALIASES, request_spans
 
 
 MODE = "híbrido experimental"
@@ -36,12 +36,6 @@ CANONICAL_TOPICS = {
     "riesgo credito": "riesgo de crédito",
 }
 CONCEPT_SYNONYMS = {"margen explotacion": "margen operativo"}
-TOPIC_ALIASES = {
-    "coeficiente cobertura liquidez": ("ccl", "activos", "liquidos", "salidas", "netas", "efectivo", "relacion"),
-    "riesgo credito": ("perdida", "potencial", "pago", "contraparte", "acreditado"),
-    "margen operativo": ("proporcion", "ingresos", "gastos", "operativos"),
-    "portafolio credito": ("segmentamos",),
-}
 RESTRICTION = re.compile(
     r"\b(?:solo|unicamente|exclusiv\w*|excepto|sin incluir|salvo|anteriores?|posteriores?|"
     r"no incluy\w*|sin considerar|no ajustad\w*|adoptara[n]?|implementara[n]?|futur\w*|vigencia)\b"
@@ -80,27 +74,6 @@ def plain(text):
     return "".join(c for c in unicodedata.normalize("NFKD", text.casefold()) if not unicodedata.combining(c))
 
 
-class DocumentNeed(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-    topic: str = Field(min_length=2, max_length=150)
-    kind: Literal["definition", "list", "passage", "scope"]
-    scope: str | None = None
-    year: int | None = None
-    report: Literal["annual", "financial"] | None = None
-    facets: tuple[tuple[str, ...], ...] = ()
-    anchor: str | None = None
-    current_report: bool = False
-
-    @property
-    def keywords(self):
-        return tuple(terms(self.topic))
-
-    @property
-    def permitted(self):
-        return sorted(set(self.keywords) | set(TOPIC_ALIASES.get(normalize(self.topic), ()))
-                      | {word for group in self.facets for word in group})
-
-
 # Patrones de evidencia, aplicados a cualquier entidad y fuente elegible.
 REPORT_YEAR = re.compile(
     r"\b(?:estados financieros|informe anual|reporte anual|(?:politicas|capitulo|apartado)(?: de)? liquidez)"
@@ -110,10 +83,14 @@ FREQUENCY = ("mensual", "semanal", "trimestral", "anual", "diari")
 PERSONS = ("cpr", "consejo", "directivo", "administracion", "grupo")
 REPORT_RECIPIENT = re.compile(r"\b(?:a qui[eé]n|qui[eé]n recibe|destinatario\w*|a que organo)\b")
 REPORT_FORM = re.compile(r"\b(?:inform\w*|report\w*)\b")
-PORTFOLIO = r"\b(?:(?:segment\w*|divid\w*|separ\w*)\b.{0,80}\bportafolio|segmentos?\b.{0,80}\bcredito)\b"
+PORTFOLIO = (r"\b(?:(?:segment\w*|divid\w*|separ\w*|categorias?)\b.{0,80}\b(?:portafolio|cartera)"
+             r"|segmentos?\b.{0,80}\bcredito|(?:portafolio|cartera)\b.{0,80}\bsegmentos?)\b")
 ORIGINATION = r"\b(?:control\w*|mitigante\w*|verific\w*|valid\w*)\b.{0,95}\boriginacion\b"
 LIQUIDITY_TOOLS = r"\b(?:herramientas|medidas|metodologias)\b.{0,70}\b(?:gestion|contingencia|operativas)\b"
 REPORTING_POLICY = r"\b(?:informar|informacion|revelacion|divulgacion)\b.{0,85}\b(?:consejo|autoridades)\b"
+LIQUIDITY_COVERAGE = re.compile(r"\b(?:ccl|coeficiente de cobertura de liquidez)\b")
+CONCEPT_REQUEST = re.compile(r"\b(?:significa|define|definicion|horizonte|intervalo|mide|calcula|flujos?)\b")
+NOMINAL_DEFINITION = re.compile(r"\b(?:definicion|concepto) (?:del?|de la) (.+?)(?:[.?!]|$)")
 SCOPE_QUESTION = re.compile(
     r"\b(?:se pueden? (?:atribuir|aplicar)|puedo concluir|es exhaustiv[oa]|es suficiente para afirmar|"
     r"(?:demuestra|acredita|prueba de que)\b.{0,45}\b(?:todas?|cada)|"
@@ -139,7 +116,7 @@ DOC_FILLERS = set(
 )
 
 
-def document_needs(question):
+def document_needs(question, *, context=None, compound=False):
     content = documentary_query(question)
     text = plain(content)
     year_match = REPORT_YEAR.search(text)
@@ -154,6 +131,10 @@ def document_needs(question):
     report = "financial" if "estados financieros" in text or (year_match and "liquidez" in year_match[0]) else (
         "annual" if re.search(r"\b(?:informe|reporte) anual\b", text) else None
     )
+    if context is not None:
+        scope = scope or context.scope
+        report = report or context.report
+        year = year or context.year
     scope_question = bool(SCOPE_QUESTION.search(text))
     if (re.search(r"\b(?:banco|grupo|filial\w*|subsidiaria\w*|anexo)\b", text) and not scope_question
             or re.search(r"\b(?:todas?|exhaustiv\w*)\b", text) and not scope_question):
@@ -162,10 +143,20 @@ def document_needs(question):
         if not (scope or report or re.search(r"\bdisponibles\b", text)):
             return []
     keys = set(terms(text))
+    if definition := indirect_definition(content):
+        canonical = normalize(definition[0])
+        if canonical in TOPIC_ALIASES:
+            return [DocumentNeed(topic=CANONICAL_TOPICS.get(canonical, definition[0]), kind="definition",
+                                 scope=scope, year=year, report=report)]
     if scope_question and "politicas" in keys and ("liquidez" in keys or scope == "tenedora"):
         topic = "políticas de liquidez" if "liquidez" in keys else "políticas de la Tenedora"
         return [DocumentNeed(topic=topic, kind="scope", scope=scope, year=year, report=report,
                              current_report=scope == "tenedora" and year is None)]
+    if ({"politica", "politicas"} & keys and "liquidez" in keys
+            and re.search(r"\b(?:divulgacion|revelacion|informar)\b", text)):
+        if not re.search(LIQUIDITY_TOOLS, text):
+            return [DocumentNeed(topic="políticas de liquidez", kind="list", scope=scope, year=year, report=report,
+                                 facets=(("informacion", "revelacion", "divulgacion"),))]
     if ({"acreditado", "contraparte"} & keys and {"incumplimiento", "pago", "quebranto"} & keys
             and {"riesgo", "concepto"} & keys and re.search(r"\b(?:que riesgo|como (?:llama|denomina))\b", text)):
         return [DocumentNeed(topic="riesgo de crédito", kind="definition", scope=scope, year=year, report=report)]
@@ -198,6 +189,10 @@ def document_needs(question):
         cleaned = re.sub(r"\b(?:de|para) (?:la )?(?:tenedora|gfnorte|banorte)\b", "", cleaned).strip()
         cleaned = DOC_LEAD.sub("", cleaned).strip()
         topic = definition_topic(cleaned.rstrip(" ,"))
+        if not topic and (nominal := NOMINAL_DEFINITION.search(cleaned)):
+            canonical = normalize(nominal[1])
+            if canonical in TOPIC_ALIASES:
+                topic = nominal[1]
         facets = ()
         anchor = None
         period = tuple(frequency for frequency in FREQUENCY if re.search(rf"\b{frequency}\w*\b", cleaned))
@@ -211,6 +206,11 @@ def document_needs(question):
             facets = (("brechas", "indicador"), ("pruebas",))
             if "contingencia" in terms(cleaned):
                 facets += (("contingencia",),)
+        elif LIQUIDITY_COVERAGE.search(cleaned) and CONCEPT_REQUEST.search(cleaned) and not re.search(
+            r"\b(?:ajust\w*|requisit\w*|umbral\w*|minim\w*|distint\w*)\b", cleaned
+        ):
+            conditions = (("estres", "tension"), ("dias",)) if re.search(r"\b(?:estres|horizonte|intervalo)\b", cleaned) else ()
+            topic, kind, facets = "coeficiente de cobertura de liquidez", "definition", conditions
         elif topic:
             kind = "definition"
         elif INDIRECT.search(cleaned) or indirect_definition(part):
@@ -231,9 +231,9 @@ def document_needs(question):
                 facets += (("cpr",), ("consejo",))
             if "semanalmente" in cleaned and "trimestralmente" in cleaned:
                 facets += (("semanal",), ("trimestral",))
-        elif len(parts) == 2:
+        elif len(parts) == 2 or compound:
             topic = cleaned
-            kind = "list" if normalize(topic).startswith("objetivos ") else (
+            kind = "list" if normalize(topic).startswith(("objetivos ", "politicas ")) else (
                 "definition" if normalize(topic) in TOPIC_ALIASES else "passage"
             )
         elif listing := explanation_terms(part):
@@ -288,10 +288,6 @@ def split_financial_operations(question):
     metrics = list(METRIC.finditer(content))
     if len(metrics) != 2 or metrics[0].lastgroup == metrics[1].lastgroup:
         return None
-    # La unidad monetaria puede tener alcance global. Conservar el flujo
-    # original si no se puede asignar a un apartado sin ambigüedad.
-    if CURRENCY.search(content):
-        return None
     try:
         verify_currency_request(content)
     except Abstain:
@@ -309,10 +305,21 @@ def split_financial_operations(question):
     else:
         boundaries = [match for match in COORDINATED_FINANCE.finditer(content)
                       if metrics[0].end() <= match.start() <= metrics[1].start()]
-        if len(boundaries) != 1:
+        if len(boundaries) == 1:
+            cut = boundaries[0]
+            first, second = content[:cut.start()], content[cut.end():]
+        else:
+            spans = request_spans(content)
+            if len(spans) != 2:
+                return None
+            first, second = (MARKER_LEAD.sub("", span.text.lstrip("¿¡ ")) for span in spans)
+    if CURRENCY.search(content):
+        # Las unidades dentro de la frase que contiene la métrica tienen
+        # alcance local. Una instrucción separada puede ser global.
+        if detached_currency(content):
             return None
-        cut = boundaries[0]
-        first, second = content[:cut.start()], content[cut.end():]
+        if not all(len(set(PERIOD.findall(normalize_periods(part)))) == 2 for part in (first, second)):
+            return None
     first_periods = list(PERIOD.finditer(normalize_periods(first)))
     if len(first_periods) == 2 and not PERIOD.search(normalize_periods(second)):
         # El segundo apartado sin fechas usa el par común previamente indicado.
@@ -333,6 +340,94 @@ def split_financial_operations(question):
     if not all(requires_financial_tools(part) for part in (first, second)):
         return None
     return first, second
+
+
+def detached_currency(question):
+    return any(CURRENCY.search(sentence) and not METRIC.search(sentence)
+               for sentence in re.split(r"(?<=[.!?])\s+", question))
+
+
+def interpret_query(question):
+    """Separar requisitos antes de asignar motores y conservar los tramos no representados."""
+    source = QuerySpan(start=0, end=len(question), text=question)
+    spans = request_spans(question)
+    financial_parts = split_financial_operations(question)
+    if financial_parts:
+        origins = spans if len(spans) == 2 else (source, source)
+        return QueryInterpretation(parts=tuple(
+            interpret_finance(text, span, source) for text, span in zip(financial_parts, origins, strict=True)
+        ))
+
+    if requires_financial_tools(question):
+        # El flujo histórico reconoce operaciones con referencias a la misma
+        # frase, como la comprobación de comparabilidad de los dos operandos.
+        if len(spans) > 1 and detached_currency(question):
+            return QueryInterpretation(parts=tuple(
+                QueryPart(span=span, context=source, kind="financial", status="ambiguous",
+                          reason="La instrucción de moneda no identifica a qué operación se aplica.")
+                for span in spans
+            ))
+        primary = interpret_finance(question, source)
+        if primary.financial is not None:
+            secondary = financial_need(question, primary.financial)
+            if secondary is not None:
+                return QueryInterpretation(parts=(
+                    primary, QueryPart(span=spans[-1], context=source, kind="financial",
+                                       status="valid", financial=secondary),
+                ))
+        if len(spans) == 1:
+            return QueryInterpretation(parts=(primary,))
+        if primary.status == "incompatible" and primary.financial is None:
+            return QueryInterpretation(parts=(primary, *(unresolved_document(span) for span in spans[1:])))
+        if not requires_financial_tools(MARKER_LEAD.sub("", spans[1].text.lstrip("¿¡ "))):
+            return QueryInterpretation(parts=(primary, *(unresolved_document(span) for span in spans[1:])))
+
+    if len(spans) == 1:
+        needs = document_needs(question)
+        if needs:
+            return QueryInterpretation(parts=tuple(
+                QueryPart(span=source, kind="documentary", status="valid", documentary=need) for need in needs
+            ))
+        return QueryInterpretation(parts=(unresolved_document(source),))
+
+    parts = []
+    first_needs = document_needs(spans[0].text, compound=True)
+    inherited = first_needs[0] if len(first_needs) == 1 else None
+    for i, span in enumerate(spans):
+        text = MARKER_LEAD.sub("", span.text.lstrip("¿¡ "))
+        if requires_financial_tools(text):
+            parts.append(interpret_finance(text, span))
+            continue
+        needs = first_needs if i == 0 else document_needs(text, context=inherited, compound=True)
+        if needs and len(parts) + len(needs) <= 2:
+            parts.extend(QueryPart(span=span, context=spans[0] if i and inherited else None,
+                                   kind="documentary", status="valid", documentary=need) for need in needs)
+        else:
+            parts.append(unresolved_document(span))
+    return QueryInterpretation(parts=tuple(parts))
+
+
+def interpret_finance(text, span, context=None):
+    try:
+        intent = parse_intent(text)
+        check_stock_sum(intent.operation, intent.metric)
+    except Abstain as exc:
+        reason = str(exc)
+        normalized = plain(reason)
+        status = ("incompatible" if any(word in normalized for word in ("moneda", "no es aditiva", "incompatib"))
+                  else "unsupported" if "restriccion" in normalized else "ambiguous")
+        return QueryPart(span=span, context=context, kind="financial", status=status, reason=reason)
+    try:
+        check_periods(intent.operation, intent.base, intent.current)
+    except Abstain as exc:
+        return QueryPart(span=span, context=context, kind="financial", status="incompatible",
+                         reason=str(exc), financial=intent)
+    return QueryPart(span=span, context=context, kind="financial", status="valid", financial=intent)
+
+
+def unresolved_document(span):
+    return QueryPart(span=span, kind="documentary", status="unsupported",
+                     reason="No se pudo representar el apartado con los criterios de evidencia.")
 
 
 def doc_support(need, snippet):
@@ -495,6 +590,8 @@ class RequestBudget:
     rescue_started: float | None = None
     attempted: dict[int, str] = field(default_factory=dict)
     verified: set[int] = field(default_factory=set)
+    executed_parts: set[int] = field(default_factory=set)
+    evidenced_parts: set[int] = field(default_factory=set)
 
     async def call(self, name, function, *args):
         if len(self.tools) >= MAX_TOOLS:
@@ -524,6 +621,8 @@ class HybridAgent:
         original_time = start
         totals = UsageTotals()
         stage = "local"
+        interpretation = interpret_query(question)
+        interpreted_at = perf_counter()
         base = ChatResponse(
             answer="No se pudo verificar la consulta dentro del plazo disponible.", citations=[], warnings=[],
             tools_used=[], request_id=uuid4().hex, provider_mode=MODE, status="abstained",
@@ -531,25 +630,44 @@ class HybridAgent:
         reply = base
         try:
             async with asyncio.timeout_at(budget.deadline):
-                operations = split_financial_operations(question)
-                primary = operations[0] if operations else question
-                finance = operations is not None or requires_financial_tools(question)
-                primary_trace = Trace() if operations else None
-                if primary_trace is not None:
-                    base = await self.financial.answer(primary, trace=primary_trace)
+                first = interpretation.parts[0]
+                finance = first.kind == "financial"
+                primary_trace = Trace() if finance else None
+                budget.executed_parts.add(0)
+                if finance:
+                    if first.financial is None:
+                        base = self.financial.response(primary_trace, first.reason)
+                    else:
+                        base = await self.financial.answer_intent(first.financial, trace=primary_trace)
+                        if base.status == "answered" and set(first.financial.currencies) <= primary_trace.verified_currencies:
+                            budget.evidenced_parts.add(0)
                 else:
-                    base = await (self.financial if finance else self.documentary).answer(primary)
+                    # Preserve the original extractive path for a single request.
+                    # In compounds, the verifier decides which of its passages can be reused.
+                    base = await self.documentary.answer(question)
                 reply = base
                 budget.tools.extend(base.tools_used)
                 original_time = perf_counter()
                 stage = "protected"
                 if finance:
-                    reply, stage = await self.finance(question, base, budget, totals, operations, primary_trace)
+                    reply, stage = await self.finance(question, base, budget, totals, primary_trace=primary_trace,
+                                                      interpretation=interpretation)
                 else:
-                    reply, stage = await self.documents(question, base, budget, totals)
+                    reply, stage = await self.documents(question, base, budget, totals, interpretation)
         except (TimeoutError, ProviderUnavailable, KeyError, OSError, sqlite3.Error, RuntimeError):
             stage = "fallback"
         finally:
+            pending = set(range(len(interpretation.parts))) - budget.evidenced_parts
+            if pending and len(interpretation.parts) > 1:
+                outstanding = ", ".join(str(i + 1) for i in sorted(pending))
+                reply = self.partial(reply, f"los apartados {outstanding} de la solicitud")
+                if reply.status == "answered" and stage in {"complete", "rescued"}:
+                    stage = "partial-rescue" if stage == "rescued" else "partial"
+            coverage = (
+                "complete" if not pending else "partial" if reply.status == "answered" else "abstained"
+            )
+            if coverage == "partial" and stage == "complete":
+                stage = "partial"
             activated = budget.rescue_started is not None
             rescue_ms = round((perf_counter() - budget.rescue_started) * 1000) if activated else 0
             attempted = ",".join(f"{i}:{kind}" for i, kind in budget.attempted.items()) or "-"
@@ -564,6 +682,15 @@ class HybridAgent:
                 "X-Hybrid-Tools": str(len(budget.tools)),
                 "X-Hybrid-Local-Ms": str(round((original_time - start) * 1000)),
                 "X-Hybrid-Total-Ms": str(round((perf_counter() - start) * 1000)),
+                "X-Hybrid-Interpretation": interpretation.status,
+                "X-Hybrid-Interpretation-Ms": str(round((interpreted_at - start) * 1000, 2)),
+                "X-Hybrid-Coverage": coverage,
+                "X-Hybrid-Requested": str(len(interpretation.parts)),
+                "X-Hybrid-Represented": str(len(interpretation.parts) - len(interpretation.unresolved)),
+                "X-Hybrid-Executed": str(len(budget.executed_parts)),
+                "X-Hybrid-Evidenced": str(len(budget.evidenced_parts)),
+                "X-Hybrid-Pending": str(len(pending)),
+                "X-Hybrid-Uninterpreted": str(len(interpretation.unresolved)),
                 "X-P2-DeepSeek-Rescue": stage,
                 "X-P2-DeepSeek-Local-Ms": str(round((original_time - start) * 1000)),
                 "X-P2-DeepSeek-Calls": str(totals.calls),
@@ -612,23 +739,20 @@ class HybridAgent:
         note = f"Quedó pendiente verificar {subject}."
         return base.model_copy(update={"answer": f"{base.answer} {note}", "warnings": [*base.warnings, note]})
 
-    async def finance(self, question, base, budget, totals, operations=None, primary_trace=None):
-        try:
-            primary = parse_intent(operations[0] if operations else question)
-            check_stock_sum(primary.operation, primary.metric)
-        except Abstain:
+    async def finance(self, question, base, budget, totals, primary_trace=None, interpretation=None):
+        interpretation = interpretation or interpret_query(question)
+        primary = interpretation.parts[0].financial
+        if primary is None:
             return base, "protected"
-        if operations:
-            try:
-                secondary = parse_intent(operations[1])
-            except Abstain as exc:
-                return self.partial(base, str(exc)), "unverified"
+        next_part = interpretation.parts[1] if len(interpretation.parts) > 1 else None
+        secondary = next_part.financial if next_part else None
+        if next_part and next_part.reason and secondary is None:
+            base = self.partial(base, f"el segundo apartado. {next_part.reason.rstrip('.')}")
+        if secondary:
             if secondary.currencies or primary.currencies:
                 return self.partial(base, secondary.metric), "tool-budget"
-            if not secondary.entity and primary_trace.result:
+            if not secondary.entity and primary_trace is not None and primary_trace.result:
                 secondary = replace(secondary, entity=primary_trace.result[0].entity)
-        else:
-            secondary = financial_need(question, primary)
         if base.status == "abstained":
             if primary.operation == "participation":
                 whole, part = primary.base, primary.current
@@ -675,6 +799,7 @@ class HybridAgent:
                 return pending, stage
             trace = Trace(tables=primary_trace.tables) if primary_trace is not None else Trace()
             budget.attempted[0] = "calculation"
+            budget.executed_parts.add(1)
             try:
                 async with asyncio.timeout_at(budget.deadline - 0.05):
                     result = await self.financial.run_intent(secondary, trace, MAX_TOOLS - len(budget.tools))
@@ -689,6 +814,7 @@ class HybridAgent:
         ):
             return pending, "unverified"
         budget.verified.add(0)
+        budget.evidenced_parts.add(1)
         citations = list({cite.evidence_id: cite for cite in [*base.citations, *result.citations]}.values())
         keep = base if base.status == "answered" else self.partial(base, primary.metric)
         return keep.model_copy(update={
@@ -696,21 +822,24 @@ class HybridAgent:
             "warnings": list(dict.fromkeys([*keep.warnings, *result.warnings])),
         }), "rescued" if base.status == "answered" else "partial-rescue"
 
-    async def documents(self, question, base, budget, totals):
-        needs = document_needs(question)
+    async def documents(self, question, base, budget, totals, interpretation):
+        needs = {i: part.documentary for i, part in enumerate(interpretation.parts[:2]) if part.documentary}
         if not needs:
             return base, "undetermined"
-        if base.status == "answered" and policy_scope(question) and base.citations:
+        if base.status == "answered" and policy_scope(question) and base.citations and len(interpretation.parts) == 1:
             # El flujo local comprueba título, página y alcance de esta política.
             if "no acredita" in base.answer or (len(base.citations) > 1 and "Medidas de gestión:" in base.answer):
+                budget.evidenced_parts.add(0)
                 return base, "complete"
-        covered = {i: cite for i, need in enumerate(needs) for cite in base.citations
+        covered = {i: cite for i, need in needs.items() for cite in base.citations
                    if base.status == "answered" and report_scope(need, cite.filename)
                    and doc_support(need, cite.snippet) and doc_support(need, base.answer)
                    and (need.kind != "scope" or "no acredita" in base.answer)}
+        budget.executed_parts.update(covered)
+        budget.evidenced_parts.update(covered)
         slots = [{"slot": i, "tipo": need.kind, "tema": need.topic, "terms": need.permitted,
                   "aliases": list(TOPIC_ALIASES.get(normalize(need.topic), ()))}
-                 for i, need in enumerate(needs) if i not in covered]
+                 for i, need in needs.items() if i not in covered]
         if not slots:
             return base, "complete"
         initial = set(covered)
@@ -726,6 +855,7 @@ class HybridAgent:
             for i, search_terms in chosen.items():
                 need = needs[i]
                 budget.attempted[i] = need.kind
+                budget.executed_parts.add(i)
                 documents = None
                 if need.scope or need.year or need.report:
                     if catalog is None:
@@ -763,6 +893,7 @@ class HybridAgent:
                     if citation:
                         covered[i] = citation
                         budget.verified.add(i)
+                        budget.evidenced_parts.add(i)
                         break
         except (TimeoutError, ProviderUnavailable, KeyError, OSError, sqlite3.Error, RuntimeError):
             stage = "fallback"
@@ -786,9 +917,9 @@ class HybridAgent:
         parts = list(dict.fromkeys(parts))
         warnings = []
         if len(covered) != len(needs):
-            missing = ", ".join(need.topic for i, need in enumerate(needs) if i not in covered)
+            missing = ", ".join(need.topic for i, need in needs.items() if i not in covered)
             warnings.append(f"Respuesta parcial. Quedó pendiente verificar {missing}.")
-        elif any(need.kind == "list" for need in needs):
+        elif any(need.kind == "list" for need in needs.values()):
             warnings.append("La selección se limita a los fragmentos citados.")
         return base.model_copy(update={
             "answer": " ".join([*parts, *warnings]), "citations": citations,

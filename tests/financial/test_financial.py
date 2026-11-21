@@ -49,6 +49,13 @@ def test_operational_diagnostics_do_not_require_complete_periods():
     assert not requires_financial_tools("Indica la diferencia entre las políticas de liquidez.")
 
 
+def test_calendar_ranges_keep_type_and_duration():
+    assert normalize_periods("abril-junio de 2024 y enero a septiembre de 2025") == "2T24 y 9M25"
+    assert normalize_periods("segundo semestre de 2024") == "2S24"
+    assert normalize_periods("febrero a abril de 2024") == "febrero a abril de 2024"
+    assert normalize_periods("primer semestre de 2024") == "6M24"
+
+
 def test_balance_geometry_requires_the_original_row_and_two_unambiguous_periods():
     periods = [local_period(PERIOD.fullmatch(label)) for label in ("2T24", "3T24")]
     cite = Citation(doc_id="a" * 64, filename="fixture.pdf", pdf_page=1, evidence_id="fixture", snippet="")

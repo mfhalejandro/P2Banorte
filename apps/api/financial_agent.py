@@ -67,6 +67,7 @@ class Intent:
     currencies: tuple[str, ...] = ()
     definition_check: bool = False
     consolidated: bool = False
+    common_basis_required: bool = False
 
 
 FINANCIAL_VERB = r"(?:compara(?:r)?|calcula(?:r)?|suma(?:r)?(?!\s+(?:de|en|entre)\b))"
@@ -104,6 +105,12 @@ class FinancialRequest:
 ORDINAL = {"primer": 1, "primero": 1, "segundo": 2, "tercer": 3, "tercero": 3, "cuarto": 4}
 QUARTER = r"(?:primer(?:o)?|segundo|tercer(?:o)?|cuarto)"
 MONTH_END = {"marzo": 3, "junio": 6, "septiembre": 9, "diciembre": 12}
+CALENDAR_MONTHS = {name: i for i, name in enumerate(
+    "enero febrero marzo abril mayo junio julio agosto septiembre octubre noviembre diciembre".split(), 1
+)}
+MONTH = "|".join(CALENDAR_MONTHS)
+MONTH_RANGE = re.compile(rf"\b({MONTH})\s*(?:[-–—]|\ba\b)\s*({MONTH})\s+de(?:l año)?\s+(20\d{{2}})\b", re.I)
+SEMESTER = re.compile(r"\b(primer(?:o)?|segundo) semestre de(?:l año)? (20\d{2})\b", re.I)
 WRITTEN_PERIOD = re.compile(
     rf"\b(?:(?P<quarter>{QUARTER})\s+trimestres?|"
     r"primeros\s+(?P<months>tres|seis|nueve|doce)\s+meses|"
@@ -130,38 +137,43 @@ NOMINAL_RATE = re.compile(
 )
 RELATIVE_QUERY = re.compile(rf"\b(?:determina\s+)?cu[aá]nto\s+{CHANGE_VERB}\s+porcentualmente\b", re.I)
 TWO_CURRENCIES = re.compile(
-    rf"\b(?:tanto\s+)?en\s+({CURRENCY.pattern})\s+(?:como|y)\s+(?:en\s+)?({CURRENCY.pattern})", re.I,
+    rf"\b(?:tanto\s+)?en\s+({CURRENCY.pattern})\s+(?:como|y)\s+(?:una\s+)?(?:en\s+)?({CURRENCY.pattern})", re.I,
 )
 
 METRIC = re.compile(
     r"\b(?P<profit>utilidad neta)|\b(?P<roa>ROA|rendimiento sobre (?:los? )?activos)|"
     r"\b(?P<roe>ROE|rendimiento sobre (?:el )?capital(?: contable)?)|"
-    r"\b(?P<market>capitalizaci[oó]n (?:de mercado|burs[aá]til))|"
+    r"\b(?P<market>capitalizaci[oó]n(?: de mercado| burs[aá]til)?)(?!\s+(?:regulatoria|bancaria|contable|de (?:intereses|deuda)))\b|"
     r"\b(?P<assets>activos? totales?|activo total|total de activos)|"
-    r"\b(?P<equity>capital contable)\b", re.I,
+    r"\b(?P<equity>capital contable)\b|\b(?P<liabilities>pasivos? total(?:es)?|total de pasivos)\b", re.I,
 )
 METRIC_NAMES = {"profit": "utilidad neta", "roa": "ROA", "roe": "ROE", "market": "capitalización de mercado",
-                "assets": "activo total", "equity": "capital contable"}
+                "assets": "activo total", "equity": "capital contable", "liabilities": "pasivo total"}
 ENTITY_BOUNDARY = (
     r"(?=[,.;?!:]|\s*$|\s+(?:entre|respecto|en|para|del?|al|desde|hasta|durante|seg[uú]n|"
-    r"si|cuando|suponiendo|considerando|expresad[oa]s?|[uú]nicamente|exclusivamente)\b|"
+    r"si|cuando|suponiendo|considerando|expresad[oa]s?|medid[oa]s?|[uú]nicamente|exclusivamente|"
+    r"necesito|solicito|requiero|representa|aport[oó]|"
+    r"(?:est[aá]n?|fue|figura|aparece|se (?:reporta|publica))(?:\s|$))\b|"
     rf"\s+{PERIOD.pattern})"
 )
 ENTITY_NAME = re.compile(
     rf"\b(?P<known>GFNorte|Grupo Financiero Banorte)\b{ENTITY_BOUNDARY}|"
     rf"\b(?:del?|para|sobre)(?:\s+la\s+entidad)?\s+"
-    rf"(?P<other>(?:Banco|Grupo|GFNorte|Empresa|Sociedad|Compa[ñn][ií]a)\b[^,.;?!:]*?){ENTITY_BOUNDARY}",
+    rf"(?P<other>(?:(?:la|las|una)\s+)?(?:Banco|Grupo|GFNorte|Tenedora|Subsidiaria(?:s)?|"
+    rf"Empresa|Sociedad|Compa[ñn][ií]a)\b[^,.;?!:]*?){ENTITY_BOUNDARY}",
     re.I,
 )
 TEMPORAL_SHARE = re.compile(
-    r"\b(?:qu[eé] (?:porcentaje|parte|proporci[oó]n|fracci[oó]n)(?: porcentual)?\b.{0,150}"
-    r"\b(?:corresponde|pertenece|aporta|dentro)|(?:forma parte|participaci[oó]n)\b.{0,100}\bacumulad|"
+    r"\b(?:(?:qu[eé] (?:porcentaje|parte|proporci[oó]n|fracci[oó]n)|cu[aá]nto del acumulad\w*)(?: porcentual)?\b.{0,150}"
+    r"\b(?:corresponde|pertenece|aporta|dentro|se atribuye|procede|gener[oó]|representa)|"
+    r"(?:forma parte|participaci[oó]n)\b.{0,100}\bacumulad|"
     r"acumulad\w*\b.{0,130}\bparticipaci[oó]n)\b", re.I,
 )
 CHANGE_QUESTION = re.compile(
     rf"\b(?:{CHANGE_VERB}|avanz[oó]|perdi[oó]|evolucion\w*|cu[aá]ntos?.{{0,55}}adicionales|"
     r"variaci[oó]n absoluta|diferencia absoluta|magnitud.{0,30}(?:incremento|descenso)|crecimiento directo|"
-    r"(?:crecimiento|variaci[oó]n) (?:relativ[oa]|porcentual)|cambio|movimiento)\b", re.I,
+    r"(?:crecimiento|variaci[oó]n|incremento|ca[ií]da|descenso) (?:relativ[oa]|porcentual)|"
+    r"cambio|movimiento|difiere|descenso)\b", re.I,
 )
 RELATIVE_UNIT = re.compile(r"\b(?:porcentualmente|porcentual|relativ[oa]|qu[eé] porcentaje|crecimiento directo)\b", re.I)
 EXPLICIT_POINTS = re.compile(r"\bpuntos porcentuales\b", re.I)
@@ -176,9 +188,26 @@ REPRESENTED_QUALIFIER = re.compile(
     r"|sin\s+(?:mezclar\s+(?:los\s+)?valores|cruzar\s+periodos)|(?:y\s+)?no\s+sumes\s+los\s+saldos)\b",
     re.I,
 )
+BASE_CONDITION = re.compile(r"\b(?:mism[oa]\s+(?:base|per[ií]metro)|(?:base|per[ií]metro)\s+com[uú]n|"
+                            r"ajustad\w*|reexpresad\w*|suponiendo\b.{0,90}\b(?:excluy|incluy)\w*)\b", re.I)
+
+
+def calendar_range(match):
+    start, end, year = match.groups()
+    a, b = CALENDAR_MONTHS[start.lower()], CALENDAR_MONTHS[end.lower()]
+    if a in (1, 4, 7, 10) and b == a + 2:
+        return f"{b // 3}T{year[-2:]}"
+    if a == 1 and b in (6, 9, 12):
+        return f"{b}M{year[-2:]}"
+    if a == 7 and b == 12:
+        return f"2S{year[-2:]}"
+    return match[0]
 
 
 def normalize_periods(text: str) -> str:
+    text = MONTH_RANGE.sub(calendar_range, text)
+    text = SEMESTER.sub(lambda match: ("6M" if match[1].lower().startswith("primer") else "2S")
+                        + match[2][-2:], text)
     text = re.sub(
         rf"\b({QUARTER})(\s+(?:y|a|al)\s+(?:el\s+)?{QUARTER}\s+trimestres?\b)",
         r"\1 trimestre\2", text, flags=re.I,
@@ -232,7 +261,7 @@ def operational_request(content):
     share = bool(TEMPORAL_SHARE.search(content))
     points = bool(EXPLICIT_POINTS.search(content))
     if (re.search(r"\bsuma(?:r)?\s+(?:los?|las?)\b", content, re.I)
-            or re.search(r"\bcu[aá]nto\b.{0,45}\bsuma\s+del?\b", content, re.I)):
+            or re.search(r"\b(?:cu[aá]nto|total)\b.{0,45}\bsuma\s+del?\b", content, re.I)):
         operation: Operation = "sum"
     elif share:
         operation = "participation"
@@ -326,11 +355,14 @@ def parse_intent(question: str) -> Intent:
     request = recognize_financial_request(question)
     if request is None:
         raise Abstain(missing)
-    if request == operational_request(request.content) and UNSUPPORTED_QUALIFIER.search(
-        REPRESENTED_QUALIFIER.sub("", request.content)
-    ):
-        # La paráfrasis no puede eliminar condiciones que el analizador no representa.
-        raise Abstain("No se pudo interpretar la restricción indicada sin cambiar el alcance de la operación.")
+    unbound = REPRESENTED_QUALIFIER.sub("", BASE_CONDITION.sub("", request.content))
+    if request == operational_request(request.content) and UNSUPPORTED_QUALIFIER.search(unbound):
+        # Una condición que exige pertenencia al acumulado ya está acreditada
+        # como requisito por la operación de participación.
+        if request.operation != "participation" or not re.fullmatch(
+            r".*\bsolo si\b[^?]*(?:pertenece|incluid[oa]|forma parte)[^?]*[.?]?\s*", unbound, re.I
+        ) or len(UNSUPPORTED_QUALIFIER.findall(unbound)) != 1:
+            raise Abstain("No se pudo interpretar la restricción indicada sin cambiar el alcance de la operación.")
     matches = list(PERIOD.finditer(request.content))
     periods = list(dict.fromkeys(local_period(match) for match in matches))
     prefix = request.indicator.strip(" ¿?!:,")
@@ -367,7 +399,8 @@ def parse_intent(question: str) -> Intent:
         raise Abstain(missing)
     if (request.operation == "participation" and periods[0].kind != "ytd"
             or request.operation != "participation" and
-            re.search(r"\brespecto\s+(?:al?|de)\s+$", request.content[:matches[-1].start()], re.I)):
+            re.search(r"\b(?:respecto\s+(?:al?|de)|frente a)\s+$",
+                      request.content[:matches[-1].start()], re.I)):
         periods.reverse()
     key = request.content.casefold()
     if "acumulad" in key and all(p.kind == "quarter" for p in periods):
@@ -387,6 +420,8 @@ def parse_intent(question: str) -> Intent:
                 if normalize(first_scale or "") != normalize(second_scale or ""):
                     raise Abstain("Las suboperaciones deben declarar la misma escala o ambas dejarla a la fuente.")
                 units.append((first_scale, first_name))
+            elif shared_scale := re.search(r"\bambas\s+en\s+(millones|miles)\b", ending, re.I):
+                units.append((shared_scale[1], first_name))
     elif is_market_metric(metric) and re.search(r"\b(?:cada una de las dos|ambas) monedas (?:publicadas|reportadas)\b", key):
         # Las dos filas admitidas se verifican independientemente en el original.
         currencies_requested = ("MXN", "USD")
@@ -402,7 +437,8 @@ def parse_intent(question: str) -> Intent:
         raise Abstain("La consulta especifica unidades o monedas incompatibles.")
     return Intent(metric, entity, *periods, request.operation, "inspecciona" in key,
                   next(iter(currencies), None), next(iter(scales), None), request.percentage_points,
-                  request.additional_difference, currencies_requested, request.definition_check, consolidated)
+                  request.additional_difference, currencies_requested, request.definition_check, consolidated,
+                  bool(BASE_CONDITION.search(request.content)))
 
 
 @dataclass
@@ -417,6 +453,7 @@ class Trace:
     result: tuple[Operand, Operand, tuple[Decimal, str, str]] | None = None
     inspected: bool = False
     tables: TableCache = field(default_factory=dict)
+    verified_currencies: set[str] = field(default_factory=set)
 
 
 class LocalToolDouble:
@@ -498,17 +535,20 @@ class FinancialAgent:
             check_stock_sum(intent.operation, intent.metric)
         except Abstain as exc:
             return self.response(Trace(), str(exc))
+        return await self.answer_intent(intent, trace=trace)
+
+    async def answer_intent(self, intent, *, trace=None):
         if not intent.currencies:
             return await self.run_intent(intent, trace)
         if intent.operation == "participation" or intent.percentage_points:
             return self.response(Trace(), "La operación solicitada no admite una salida en monedas.")
 
         results = []
-        tables: TableCache = {}
+        request_trace = trace or Trace()
         remaining = self.max_calls * 2
         deadline = asyncio.get_running_loop().time() + self.timeout
         for currency in intent.currencies:
-            trace = Trace(tables=tables)
+            trace = Trace(tables=request_trace.tables)
             try:
                 async with asyncio.timeout_at(deadline):
                     reply = await self.run_intent(replace(intent, output_currency=currency), trace, remaining)
@@ -517,6 +557,8 @@ class FinancialAgent:
             except BudgetExhausted:
                 reply = self.response(trace, "Se agotaron las llamadas compartidas antes de verificar esta moneda.")
             results.append((currency, reply))
+            if trace.result is not None and reply.status == "answered":
+                request_trace.verified_currencies.add(currency)
             remaining -= len(trace.tools)
         first = results[0][1]
         return first.model_copy(update={
@@ -625,6 +667,10 @@ class FinancialAgent:
                 raise Abstain("La unidad solicitada exige una diferencia entre tasas, con dos tasas comparables.")
             if intent.definition_check and (not base.definition or not current.definition):
                 raise Abstain("Las fuentes no acreditan las definiciones de ambos operandos.")
+            if intent.common_basis_required and (
+                not base.comparable_basis or base.comparable_basis != current.comparable_basis
+            ):
+                raise Abstain("La evidencia no acredita el ajuste o el perímetro común solicitado.")
             trace.result = base, current, calculate(params.operation, base, current)
 
     @staticmethod

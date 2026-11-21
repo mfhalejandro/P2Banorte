@@ -750,3 +750,135 @@ La demo en 8194/5194 conserva el proceso de inicio del preflight. Para cargar el
 Chromium comprobó M02 y M06 desde Vite aislado en 5205 con FastAPI en 8205. Ambas respuestas acreditaron los apartados esperados y abrieron los PNG de las páginas 153 y 6 respectivamente.
 
 **Veredictos.** Precisión financiera VERIFIED en los cálculos emitidos y acreditados, con cobertura de nuevas formulaciones PARTIAL. Recuperación documental PARTIAL. Consultas compuestas PARTIAL. Generalización PARTIAL. Regresiones VERIFIED en las suites reejecutadas.
+
+## Interpretación estructurada y evaluación emparejada · base 4dc4589
+
+### A–B. Estado inicial y comparación N
+
+HEAD y `origin/main` apuntaban a `4dc458969582685cf3c3fb0d0b2af1a6f79fd012`. El árbol y el índice Git estaban limpios. El preflight validó la protección de los ocho RCTF. Se guardó una copia del árbol de código y sus manifiestos en `/tmp/p2-structured-4dc4589/`. Las unidades de la demo en 8194/5194 seguían activas con 24 documentos, planificador determinista y salida bloqueada. Los evaluadores montaron el SQLite de 24 PDF en solo lectura con `mode=ro&immutable=1`. Cada API evaluada tuvo cuota de 2 CPU, 4 GiB y acceso limitado a loopback.
+
+| N01–N16 antes de cambios | PASS | PARTIAL | FAIL |
+|---|---:|---:|---:|
+| `financial-local` en 4dc4589 | 1 | 3 | 12 |
+| Híbrido determinista en 4dc4589 | 4 | 3 | 9 |
+
+La mejora inicial de tres casos vino de N03, N04 y N15. N mantuvo las preguntas y los oráculos originales. Los JSONL de ambas variantes incluyen intención, candidatos, herramientas, citas y latencia. Para el híbrido se capturaron también los slots y planes del rescate. El control local nunca creó un cliente de proveedor.
+
+### C–E. Contrato, implementación y cobertura
+
+`QuerySpan` registra el rango y texto original. `QueryPart` conserva la solicitud documental o el `Intent` financiero existente, el estado de interpretación y, cuando se comparte contexto, su tramo original. El `Intent` mantiene indicador, entidad, periodos con tipo y duración, operación, moneda, escala y condiciones de comparabilidad. `QueryInterpretation` agrupa secciones válidas, ambiguas, incompatibles y sin representación.
+
+```mermaid
+flowchart LR
+  Q[Pregunta original] --> S[Tramos y requisitos]
+  S --> I[Interpretación local tipada]
+  I --> V[Herramientas V3 y evidencia original]
+  V --> C[Cobertura por apartado]
+  S --> C
+  C --> R[Respuesta con citas, parcial o abstención]
+```
+
+La segmentación precede a la selección de evidencia. Los calificadores que funcionan como referencias dependientes siguen vinculados a su apartado. Una coordinación de solicitudes inicia un requisito separado. El recuperador y la calculadora siguen validando el original. Una cita o una cifra acreditan su apartado específico. `X-Hybrid-Coverage` distingue cobertura completa, parcial y abstención. Las cabeceras de conteo distinguen apartados solicitados, representados, ejecutados, acreditados, pendientes y sin interpretación. El cuerpo conserva el contrato de chat de V3 y comunica qué apartados quedaron pendientes.
+
+El flujo financiero distingue periodos escritos y rangos exactos de calendario, conserva el tramo de procedencia, separa entidad y predicado, y limita a dos cálculos con moneda local a su cláusula. Una instrucción monetaria aislada con alcance ambiguo bloquea la operación afectada. El validador de perímetro sigue exigiendo respaldo publicado. El flujo documental valida alias y facetas contra el pasaje y mantiene el alcance heredado como contexto explícito.
+
+Una prueba en FastAPI solicita una definición acreditable y una política futura sin representación. La respuesta conserva el PNG de la primera, informa un apartado pendiente y registra dos solicitados, uno acreditado y cobertura parcial. N10, la regresión conocida de dos requisitos documentales, se contrasta por las dos páginas y por separado mediante métricas de cobertura.
+
+### Protocolo O
+
+Se definieron y congelaron 24 preguntas y sus oráculos fuera de Git antes de los cambios. SHA-256 de `O.json` `2e8b24cae9a3e7c8f3d71a5afea3e9da1117df6e103d2294e87cdbd2358e2998`. Las celdas se contrastaron por alineación de tabla y los pasajes contra los PDF originales. Los aciertos exigen estado, contenido, ámbito de evidencia, fila/columna y unidad según el oráculo. Una solicitud que pide un apartado acreditable y otro que exige abstención puede aprobar si entrega el primero con cita y declara el segundo pendiente. La misma persona técnica preparó la muestra y editó el candidato. O aporta evidencia exploratoria y no constituye una validación independiente.
+
+### F. Regresiones conocidas
+
+| Batería | Antes PASS / PARTIAL / FAIL | Candidato PASS / PARTIAL / FAIL |
+|---|---:|---:|
+| Visual | 20 / 0 / 0 | 20 / 0 / 0 |
+| G | 22 / 0 / 0 | 22 / 0 / 0 |
+| J | 15 / 3 / 2 | 15 / 3 / 2 |
+| K | 11 / 0 / 1 | 11 / 0 / 1 |
+| L | 25 / 0 / 0 | 25 / 0 / 0 |
+| M | 12 / 0 / 0 | 12 / 0 / 0 |
+| Financiera R | 14 / 0 / 0 | 14 / 0 / 0 |
+| Aceptación | 11 / 0 / 0 | 11 / 0 / 0 |
+| Ampliada | 28 / 0 / 0 | 28 / 0 / 0 |
+| B | 10 / 0 / 0 | 10 / 0 / 0 |
+
+El antes de Visual, G, J, K, L, M y los controles financieros corresponde a los registros previos consignados en esta auditoría. El candidato reejecutó estas baterías. R, aceptación, ampliada y B se ejecutaron sobre el modo `financial-local` del candidato. Los falsos cortes del primer ensayo se reprodujeron y corrigieron antes de la medición final. Pasaron **115 pruebas Python, 5 subcasos y 6 smoke Chromium P0**. Se conservaron SQLite, Decimal y las verificaciones de números, notas y procedencia.
+
+La reejecución diagnóstica de N dio **14 PASS, 0 PARTIAL y 2 FAIL**. Se conservaron N03, N04, N13 y N15. Se recuperaron N01, N02, N05, N07, N08, N10, N11, N12, N14 y N16. N06 conserva la abstención ante bases o cifras candidatas incompatibles. N09 conserva la abstención por evidencia inequívoca insuficiente. Ningún negativo de N produjo un cálculo improcedente.
+
+En N10 el detector registró dos requisitos, dos representados y dos acreditados. La política tiene cita en EEFF 2025, p. 152, y las medidas en p. 153. La prueba sintética del apartado futuro acredita el comportamiento de cobertura parcial ante una solicitud explícita que el intérprete no representa.
+
+Manifiesto de producción congelado, SHA-256 `3819a67bf7f41e1350f44fc543424a7b01e0577a091b392ad8a4eb8476d1bce5`. Se conservaron los manifiestos y todas las capturas en el área local de evaluación.
+
+### G. Comparación emparejada O
+
+Las tres variantes recibieron una sola pasada en orden A, B, C y en unidades separadas. A y C se iniciaron desde el archivo de `4dc4589`. B usó el manifiesto nuevo congelado. Las variantes usaron los mismos PDF, SQLite en lectura, cuota, preguntas y oráculos. El orden puede favorecer cachés del sistema de archivos. El expediente local `O-comparacion.md` reúne pregunta literal, oráculo, respuesta completa, HTTP, herramientas, latencia, citas y clasificación por caso. Los JSONL conservan el registro crudo.
+
+| Variante | PASS | PARTIAL | FAIL | Citas pertinentes | Celdas citadas |
+|---|---:|---:|---:|---:|---:|
+| A · híbrido anterior | 4 | 5 | 15 | 7/7 | 6 |
+| B · híbrido estructurado | 12 | 3 | 9 | 19/19 | 14 |
+| C · financial-local anterior | 4 | 4 | 16 | 6/6 | 6 |
+
+| ID | A | B | C | Diferencia o pendiente en B |
+|---|---|---|---|---|
+| O01 | FAIL | PASS | FAIL | Acredita ambos segmentos del portafolio. |
+| O02 | FAIL | PASS | FAIL | Acredita flujos, horizonte y escenario de estrés del CCL. |
+| O03 | FAIL | FAIL | FAIL | Periodicidad indirecta y año sin representación. |
+| O04 | FAIL | FAIL | FAIL | No acredita el pasaje de controles con la formulación solicitada. |
+| O05 | FAIL | FAIL | FAIL | No encuentra la definición sobre garantías a partir de la referencia indirecta. |
+| O06 | FAIL | FAIL | FAIL | No acredita el instrumento de contingencia con la formulación solicitada. |
+| O07 | PASS | PASS | PASS | Conserva dos operandos y la diferencia absoluta. |
+| O08 | PARTIAL | PASS | PARTIAL | Acredita ambas tasas y el resultado. La cabecera informa cobertura parcial porque «indica las dos tasas» se separa como un requisito redundante. El oráculo congelado da PASS al contenido acreditado. |
+| O09 | FAIL | FAIL | FAIL | No resuelve la referencia «al mismo acumulado» para el segundo año. |
+| O10 | FAIL | FAIL | FAIL | Falso rechazo de moneda en una cláusula que selecciona una fila en pesos. |
+| O11 | FAIL | FAIL | FAIL | No liga la segunda referencia abreviada de trimestre. |
+| O12 | FAIL | PASS | FAIL | Distingue participación y verifica sus dos celdas. |
+| O13 | FAIL | PASS | FAIL | Normaliza rangos trimestrales y conserva puntos porcentuales. |
+| O14 | FAIL | PARTIAL | FAIL | Acredita destinatario y frecuencia. Declara pendiente el otro apartado. |
+| O15 | PARTIAL | PASS | FAIL | Acredita definición y verificaciones en dos páginas del informe anual. |
+| O16 | FAIL | PASS | FAIL | Ejecuta dos cálculos en calendarios y unidades distintos. |
+| O17 | FAIL | FAIL | FAIL | Interpreta dos requisitos. No verifica los operandos del primero y deja el segundo pendiente. |
+| O18 | FAIL | FAIL | FAIL | Detecta el apartado futuro y se abstiene. Tampoco acredita la definición previa. |
+| O19 | PASS | PASS | PASS | Rechazo explícito de CHF, sin cálculo. |
+| O20 | PARTIAL | PARTIAL | PARTIAL | Abstención segura. Faltó identificar la no aditividad. |
+| O21 | PASS | PASS | PASS | Rechaza la comparación entre trimestre y acumulado. |
+| O22 | PARTIAL | PARTIAL | PARTIAL | Abstención segura. Faltó identificar y citar la advertencia de perímetro. |
+| O23 | PASS | PASS | PASS | Rechaza la entidad sin sustituirla. |
+| O24 | PARTIAL | PASS | PARTIAL | Explica que el trimestre queda fuera del acumulado. |
+
+B ganó ocho PASS completos frente a ambos controles, de 16,7 % a 50 %, y conservó los cuatro PASS originales. O14 mejoró a parcial. B activó diez rescates. Cuatro se completaron, uno quedó parcial y cinco no verificaron evidencia. La cobertura declarada aún puede separar instrucciones de formato redundantes o perder formas no reconocidas de coordinación. La interpretación abierta y la generalización quedan PARTIAL.
+
+### H–J. Precisión, seguridad y rendimiento
+
+Las seis operaciones aritméticas emitidas por B en O coinciden con las celdas y unidades del oráculo. Todas las consultas de seguridad se abstuvieron. Dos quedaron parciales por sus explicaciones. Se conservó el rechazo conservador de evidencia contradictoria en N06 y de procedencia ambigua en N09. Las 19 citas de B abrieron PNG y se comprobaron como textuales y pertinentes. DeepSeek quedó NOT RUN con cero llamadas, tokens y USD externos. Los hashes del corpus, índice, ledger y `.env` se conservaron y el control RCTF pasó.
+
+| Medición O | A | B | C |
+|---|---:|---:|---:|
+| POST total mediana / P95 / máximo, s | 0,113 / 5,112 / 6,311 | 0,297 / 9,366 / 9,419 | 0,101 / 5,562 / 6,627 |
+| POST con respuesta acreditada, mediana / P95 / máximo, s | 3,288 / 3,288 / 3,288 | 3,452 / 9,366 / 9,366 | 3,891 / 3,891 / 3,891 |
+| POST en abstenciones, mediana / P95 / máximo, s | 0,096 / 5,082 / 6,311 | 0,138 / 9,419 / 9,419 | 0,099 / 5,314 / 6,627 |
+| CPU de la unidad durante O con PNG, s | 25,79 | 58,37 | 27,34 |
+| Memoria máxima de la unidad, MiB | 146,36 | 155,55 | 104,10 |
+| Herramientas / lecturas lógicas | 83 / 37 | 158 / 81 | 68 / 35 |
+
+El coste mediano de interpretar en B fue 1,30 ms, con P95 de 4,01 ms y máximo de 5,71 ms. B hizo 51 búsquedas y 81 lecturas. El tiempo se concentró en recuperación, lectura geométrica y segundos apartados, que comparten un presupuesto. El máximo observado de B fue 22 herramientas y 9,419 s. Las unidades mantuvieron 2 CPU, 4 GiB, 15 s y 24 herramientas. Las cifras de latencia reflejan tamaños de grupos distintos y una prueba secuencial con caché del sistema compartida.
+
+### K–L. Operación y veredicto
+
+**READY para la demo local.** Chromium pasó los cinco recorridos dirigidos tanto en la instancia aislada como en la demo. Acreditó una consulta documental, una financiera, dos operaciones independientes, una abstención por moneda y una respuesta parcial con su cita. Verificó render de PNG, biblioteca de 24 documentos y ausencia de desbordamiento horizontal. Los seis smoke de P0 cubrieron los cinco anchos y el reintento. Se recargó solo FastAPI después de la validación aislada. Vite siguió en 5194. `/api/health` desde 8194 y 5194 confirmó `ok`, 24 documentos, planificador determinista y salida bloqueada.
+
+Desde la raíz, `systemctl --user restart p2banorte-api.service` carga la versión candidata en la unidad existente. Después, `curl --noproxy '*' -fsS http://127.0.0.1:5194/api/health` comprueba el proxy y el modo. El bloque de inicio del README permite recuperar ambos servicios o volver al modo `financial-local`. Para revertir también el código de la API al archivo de `4dc4589` sin modificar el árbol, ejecuta `bash /tmp/p2-structured-4dc4589/rollback-demo.sh`. El comando vuelve a usar el mismo índice en solo lectura. El argumento opcional `financial-local` selecciona ese modo sobre el código de referencia. [Arranque de Vite y modos de API](../../README.md#rescate-determinista-en-la-demo-web)
+
+| Capacidad | Veredicto |
+|---|---|
+| Interpretación estructurada | VERIFIED como contrato y flujo ejercitados. Comprensión de formulaciones nuevas PARTIAL. |
+| Precisión financiera | VERIFIED para operaciones emitidas y verificadas. Cobertura de consultas financieras abiertas PARTIAL. |
+| Recuperación documental | PARTIAL por paráfrasis y referencias indirectas sin evidencia acreditada. |
+| Cobertura integral | PARTIAL. Protegidos los requisitos explícitos ensayados. Persisten casos de segmentación y atribución, como O08 y O18. |
+| Generalización | PARTIAL. Mejora emparejada documentada con una muestra exploratoria de 24 preguntas. |
+| Regresiones | VERIFIED en las suites reejecutadas. |
+| Preparación operativa | READY en loopback. |
+
+Los archivos `O.json`, `O-{A,B,C}.jsonl`, los veredictos, `O-comparacion.md`, `O-summary.txt` y los manifiestos están en `/tmp/p2-structured-4dc4589/`. Las preguntas, los oráculos y los registros crudos quedan fuera de Git.

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from apps.api.deepseek_config import SpendLedger, USD_NANO
 from apps.api.deepseek_fixture import HYBRID_QUESTIONS
 from apps.api.financial_agent import parse_intent
-from apps.api.hybrid_agent import document_needs, split_financial_operations
+from apps.api.hybrid_agent import document_needs, interpret_query, split_financial_operations
 from apps.api.hybrid_planner import question_hash
 from apps.api.main import create_app
 
@@ -47,6 +47,41 @@ def test_documentary_presentation_is_separated_from_evidence_facets():
     assert ("pruebas",) in methods.facets
     assert ("trimestral",) in reports.facets and ("mensual",) not in reports.facets
     assert {"presenta", "describe", "separado"}.isdisjoint(methods.permitted + reports.permitted)
+
+
+def test_uninterpreted_request_cannot_disappear_from_coverage(tmp_path, monkeypatch):
+    from apps.api.deepseek_fixture import synthetic_corpus
+
+    question = "¿Qué es el margen operativo? Por separado, explica qué política entrará en vigor en 2043."
+    interpretation = interpret_query(question)
+    assert interpretation.status == "partial"
+    assert interpretation.unresolved == (1,)
+    are_valid = [part.span.text == question[part.span.start:part.span.end] for part in interpretation.parts]
+    assert all(are_valid)
+    monkeypatch.setenv("LLM_PROVIDER", "hybrid-experimental")
+    monkeypatch.setenv("HYBRID_DEEPSEEK_SCOPE", "blocked")
+    with TestClient(create_app(synthetic_corpus(str(tmp_path)))) as client:
+        response = client.post("/api/chat", json={"message": question})
+    assert response.status_code == 200
+    assert response.headers["x-hybrid-requested"] == "2"
+    assert response.headers["x-hybrid-evidenced"] == "1"
+    assert response.headers["x-hybrid-uninterpreted"] == "1"
+    assert response.headers["x-hybrid-coverage"] == "partial"
+    assert response.headers["x-hybrid-decision"] != "complete"
+    assert "pendiente" in response.json()["answer"].lower()
+    assert {citation["pdf_page"] for citation in response.json()["citations"]} == {1}
+
+
+def test_independent_operations_keep_clause_local_currency():
+    question = (
+        "Calcula el cambio del ROA de Grupo Faro entre 1T24 y 2T24. "
+        "Después calcula la diferencia de utilidad neta de Grupo Faro entre 6M23 y 6M24 en millones de MXN."
+    )
+    first, second = interpret_query(question).parts
+    assert first.financial.metric == "ROA" and first.financial.output_currency is None
+    assert second.financial.metric == "utilidad neta"
+    assert (second.financial.base.label, second.financial.current.label) == ("6M23", "6M24")
+    assert (second.financial.output_currency, second.financial.output_scale) == ("MXN", "millones")
 
 
 @pytest.fixture

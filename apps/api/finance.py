@@ -7,7 +7,7 @@ from typing import Literal
 from .corpus import Citation, terms
 
 Operation = Literal["difference", "percent_change", "ratio", "participation", "sum"]
-PERIOD = re.compile(r"(?<!\w)(?:([1-4])\s*T|([369])\s*M|(12)\s*M)\s*[- ]?\s*(20\d{2}|\d{2})(?!\w)", re.I)
+PERIOD = re.compile(r"(?<!\w)(?:([1-4])\s*T|([369])\s*M|(12)\s*M|(2)\s*S)\s*[- ]?\s*(20\d{2}|\d{2})(?!\w)", re.I)
 
 
 class Abstain(ValueError):
@@ -24,10 +24,12 @@ class Period:
 
 
 def local_period(match):
-    quarter, ytd, full, digits = match.groups()
+    quarter, ytd, full, second_semester, digits = match.groups()
     year = int(digits) + (2000 if len(digits) == 2 else 0)
     if quarter:
         return Period(f"{quarter}T{year % 100:02}", "quarter", 3, year, int(quarter) * 3)
+    if second_semester:
+        return Period(f"2S{year % 100:02}", "semester", 6, year, 12)
     months = int(ytd or full)
     return Period(f"{months}M{year % 100:02}", "ytd", months, year, months)
 

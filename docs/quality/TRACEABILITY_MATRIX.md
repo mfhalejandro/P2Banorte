@@ -143,3 +143,14 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | SPEC-002-AC-06 | Instancias locales con modo determinista y salida bloqueada. Cero llamadas, tokens y USD externos. | NOT RUN. |
 
 [Diagnóstico, resultados y recursos](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#robustez-semántica-del-híbrido-determinista--base-cea74aa)
+
+### Interpretación estructurada y evaluación emparejada
+
+| Criterio | Evidencia | Resultado |
+|---|---|---|
+| SPEC-001 y T-13 | Cobertura por apartado con tramos auditables, preservación de los 74 casos Visual/G/J/K y prueba HTTP de respuesta parcial. N10 verifica dos páginas. | Regresiones VERIFIED. Recuperación y cobertura abiertas PARTIAL. |
+| SPEC-002-AC-01/02/03/05, T-05/T-07/T-11 | Intent tipado, cláusulas con sus propios periodos y moneda, Decimal y seis operaciones verificadas en O. Se conservaron los seis rechazos de seguridad y los 14 casos R. | VERIFIED para los cálculos acreditados. Dos diagnósticos O parciales. |
+| T-13 · Comparación exploratoria | O congelada. Híbrido anterior 4/24, candidato 12/24, control local 4/24. | PARTIAL para generalización. |
+| SPEC-002-AC-06 | Cero llamadas, tokens y costo externo. API y Vite activos con el planificador determinista. | NOT RUN para DeepSeek. READY en loopback. |
+
+[Diseño, validación y operación](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#interpretación-estructurada-y-evaluación-emparejada--base-4dc4589)

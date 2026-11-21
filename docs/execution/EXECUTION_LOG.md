@@ -198,3 +198,7 @@ Codex reanudó en `2fa82a6` y conservó la edición de bitácora que ya estaba e
 ## 2026-11-21T00:02:42+01:00 · Robustez semántica del híbrido
 
 Se reanudó en `cea74aa` con HEAD y origin/main alineados. Se respaldó la base fuera del repositorio, se verificó RCTF y se congeló N. Las instancias temporales de FastAPI corrieron con SQLite de solo lectura, 2 CPU, 4 GiB y salida bloqueada. M pasó de 5/12 a 12/12 y N obtuvo 4 PASS, 3 PARTIAL y 9 FAIL en una sola pasada. Pasaron 112 pruebas Python, cinco subcasos y seis smoke Chromium. [Diagnóstico, regresiones y recursos](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#robustez-semántica-del-híbrido-determinista--base-cea74aa)
+
+## 2026-11-20T18:03:28-06:00 · Interpretación estructurada y evaluación emparejada
+
+Se reanudó en `4dc4589`. Se midió N en dos variantes y se congelaron los oráculos O antes del código. El candidato preservó las regresiones y obtuvo 14/16 N y 12/24 O. El híbrido anterior y financial-local obtuvieron 4/24 O cada uno. Pasaron 115 pruebas Python, 5 subcasos y 6 smoke de Chromium. Después de la validación aislada se reinició FastAPI y se repitieron cinco recorridos dirigidos desde Vite 5194. La salida externa permaneció bloqueada. [Resultados y reversión](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#interpretación-estructurada-y-evaluación-emparejada--base-4dc4589)
