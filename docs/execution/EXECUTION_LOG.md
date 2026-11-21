@@ -202,3 +202,7 @@ Se reanudó en `cea74aa` con HEAD y origin/main alineados. Se respaldó la base 
 ## 2026-11-20T18:03:28-06:00 · Interpretación estructurada y evaluación emparejada
 
 Se reanudó en `4dc4589`. Se midió N en dos variantes y se congelaron los oráculos O antes del código. El candidato preservó las regresiones y obtuvo 14/16 N y 12/24 O. El híbrido anterior y financial-local obtuvieron 4/24 O cada uno. Pasaron 115 pruebas Python, 5 subcasos y 6 smoke de Chromium. Después de la validación aislada se reinició FastAPI y se repitieron cinco recorridos dirigidos desde Vite 5194. La salida externa permaneció bloqueada. [Resultados y reversión](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#interpretación-estructurada-y-evaluación-emparejada--base-4dc4589)
+
+## 2026-11-20T18:26:46-06:00 · Evaluación final P01–P16
+
+Se verificó el candidato `57bcfe6` y se hizo una única pasada literal por FastAPI aislado en 8220, con SQLite de solo lectura, 2 CPU, 4 GiB y salida bloqueada. Resultado 3 PASS, 3 PARTIAL y 10 FAIL, con 6/6 citas cotejadas. Cinco controles de Chromium ajenos a P pasaron en 5194. Se preservaron los servicios de demo, el código y las huellas protegidas. DeepSeek registró cero llamadas, tokens y USD. El informe, las respuestas literales y los oráculos congelados se conservaron en `/tmp/p2-final-eval-57bcfe6/`.
