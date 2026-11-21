@@ -882,3 +882,30 @@ Desde la raíz, `systemctl --user restart p2banorte-api.service` carga la versi�
 | Preparación operativa | READY en loopback. |
 
 Los archivos `O.json`, `O-{A,B,C}.jsonl`, los veredictos, `O-comparacion.md`, `O-summary.txt` y los manifiestos están en `/tmp/p2-structured-4dc4589/`. Las preguntas, los oráculos y los registros crudos quedan fuera de Git.
+
+## Referencias temporales, entidades y conservación semántica
+
+Se reanudó con HEAD y `origin/main` en `8e75905`, árbol e índice Git limpios. El cambio desde `57bcfe6` era de bitácora. Se conservó fuera del repositorio un respaldo del candidato estable y se comprobó su huella en una instancia aislada. Los 24 PDF registran 5,899 páginas y 34,662 fragmentos en SQLite. La evaluación abrió el índice en modo inmutable y de solo lectura.
+
+La auditoría de P separó los fallos de resolución temporal, delimitación, despacho mixto y recuperación. La resolución temporal conserva tramos, años, duración y antecedentes. Las fechas del reporte se distinguen de los operandos. El intérprete conserva la forma literal y canónica de las entidades, adjunta las instrucciones de presentación y exige evidencia propia para cada parte de una consulta mixta. Las validaciones independientes de celdas, unidad, entidad y perímetro siguen antes de Decimal.
+
+| Validación | Candidato |
+|---|---:|
+| P conocida | 16 PASS, 29/29 citas y 20/20 celdas |
+| Visual, G, L y M | 20/20, 22/22, 25/25 y 12/12 |
+| J, K, N | 15/3/2, 11/0/1 y 14/0/2 PASS/PARTIAL/FAIL |
+| O conocida | 14/3/7 frente a 12/3/9 en la base |
+| Financiera, aceptación, ampliada, B | 14/14, 11/11, 28/28 y 10/10 |
+| Python y Chromium | 132 pruebas, 5 subcasos, 6 smoke P0 y 5 recorridos reales aislados |
+
+P pasó de 3/3/10 a 16/0/0. P16 respondió con cobertura parcial y logró PASS por acreditar la definición del CCL y explicar la falta de evidencia para 2042. O09 recuperó el mismo acumulado y O10 seleccionó la fila en pesos. O11 interpretó bien los periodos. La lectura sigue sin acreditar una celda inequívoca para el par solicitado.
+
+Q se congeló antes del primer cambio con SHA-256 `9a2b8ca07a2ba1b4a03bef3c4a2c78eaf4fb5294dc4fa8e065ebe730eba0ea01`. La preparó el mismo agente que implementó la revisión. Cada versión se ejecutó una vez con el mismo corpus, índice, oráculos y presupuesto. El estable obtuvo **1 PASS, 2 PARTIAL y 9 FAIL**. El candidato obtuvo **4 PASS, 2 PARTIAL y 6 FAIL**. Q02, Q04 y Q07 pasaron. Q09 acreditó el ROA y dejó pendiente el segundo cálculo. En Q03 el estable acreditó ambos importes con la resta invertida y el candidato produjo una abstención por una entidad ambigua. Es una pérdida de cobertura en la muestra. Continúan los fallos con elipsis de cierre, destinatarios mensuales indirectos, segmentación poco explícita y algunas solicitudes de no aditividad sin verbo imperativo.
+
+Q registró 2/2 citas válidas en el estable y 7/7 en el candidato. Mediana, P95 y máximo de POST en segundos fueron 0.134, 4.902 y 4.902 en el estable frente a 0.166, 6.505 y 6.505 en el candidato. Los picos fueron 93.2 y 100.5 MiB con 2 CPU, 4 GiB y salida de red limitada a loopback. El candidato consumió 19.649 s de CPU y 61 herramientas, incluidas 28 lecturas, frente a 7.795 s de CPU, 36 herramientas y 14 lecturas en el estable. El tiempo del estable incluye más abstenciones rápidas. P registró 2.355 s de mediana, 8.485 s de máximo y hasta 21 herramientas. Se conservaron el límite de 15 s y el máximo de 24 herramientas.
+
+Los oráculos, tramos, respuestas literales y mediciones se guardaron en el área local de evaluación `/tmp/p2-context-8e75905/`. Q respalda una mejora exploratoria de tres respuestas completas y la generalización se mantiene PARTIAL. El resultado histórico del simulacro se conserva. DeepSeek en esta intervención queda NOT RUN con cero llamadas, tokens y costo externo.
+
+La demo quedó **READY en loopback**. FastAPI en 8194 y Vite en 5194 informan 24 documentos, planificador determinista y alcance externo bloqueado. Desde 5194 se comprobaron una respuesta documental, un cálculo, una consulta mixta, una abstención monetaria y una respuesta parcial. Los enlaces de las cuatro respuestas con evidencia abrieron la página PNG.
+
+El respaldo de `57bcfe6` se comprobó en la instancia aislada. Para revertir la API de esta sesión se usa `bash /tmp/p2-context-8e75905/rollback-demo.sh`. El argumento `financial-local` selecciona el control local. Vite conserva el mismo puerto y proxy. La integridad se verifica con `python3 -B scripts/quality/check_requirements.py --preflight`. Los comandos de arranque y archivos de evaluación quedan registrados en el informe local.

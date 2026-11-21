@@ -206,3 +206,7 @@ Se reanudó en `4dc4589`. Se midió N en dos variantes y se congelaron los orác
 ## 2026-11-20T18:26:46-06:00 · Evaluación final P01–P16
 
 Se verificó el candidato `57bcfe6` y se hizo una única pasada literal por FastAPI aislado en 8220, con SQLite de solo lectura, 2 CPU, 4 GiB y salida bloqueada. Resultado 3 PASS, 3 PARTIAL y 10 FAIL, con 6/6 citas cotejadas. Cinco controles de Chromium ajenos a P pasaron en 5194. Se preservaron los servicios de demo, el código y las huellas protegidas. DeepSeek registró cero llamadas, tokens y USD. El informe, las respuestas literales y los oráculos congelados se conservaron en `/tmp/p2-final-eval-57bcfe6/`.
+
+## 2026-11-20T19:32:31-06:00 · Corrección contextual y evaluación Q
+
+Se reanudó en `8e75905`, se respaldó `57bcfe6` y se congeló Q antes de editar. P obtuvo 16/16 con 29 citas verificadas. Las regresiones conservaron los PASS de la base, con O en 14/24. Q pasó de 1 a 4 respuestas completas sobre 12. Pasaron 132 pruebas Python, cinco subcasos y los seis smoke P0. Después de los cinco recorridos aislados se activó FastAPI en 8194 y se reprodujeron desde Vite 5194. La salida quedó bloqueada. [Auditoría, recursos y reversión](../quality/AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#referencias-temporales-entidades-y-conservación-semántica)

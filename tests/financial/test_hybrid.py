@@ -404,3 +404,54 @@ def test_calendar_exclusion_does_not_cite_an_unrelated_basis_warning():
         assert budget.rescue_started is None
 
     asyncio.run(verify())
+
+
+def test_financial_presentation_is_traced_without_a_second_operation():
+    question = "Calcula la diferencia de ROE de Grupo Faro de 1T24 a 2T24. Indica las dos tasas originales."
+    part, = interpret_query(question).parts
+    assert part.financial and part.status == "valid"
+    assert part.presentation == ("Indica las dos tasas originales.",)
+    assert part.span.text == question
+
+
+@pytest.mark.parametrize("financial_first", [True, False])
+def test_mixed_parts_have_independent_citations_and_coverage(monkeypatch, tmp_path, financial_first):
+    from apps.api.deepseek_fixture import synthetic_corpus
+
+    financial = "Calcula la diferencia de utilidad neta de Grupo Faro entre 3T24 y 3T25"
+    documentary = "Explica qué es el margen operativo"
+    parts = (financial, documentary) if financial_first else (documentary, financial)
+    question = ". ".join(parts) + "."
+    corpus = synthetic_corpus(str(tmp_path))
+    monkeypatch.setenv("LLM_PROVIDER", "hybrid-experimental")
+    monkeypatch.setenv("HYBRID_DEEPSEEK_SCOPE", "blocked")
+    with TestClient(create_app(corpus)) as client:
+        response = client.post("/api/chat", json={"message": question})
+    assert response.status_code == 200
+    assert response.headers["x-hybrid-requested"] == "2"
+    assert response.headers["x-hybrid-evidenced"] == "2"
+    assert response.headers["x-hybrid-coverage"] == "complete"
+    assert "12.29 millones de mxn" in response.json()["answer"]
+    assert {cite["pdf_page"] for cite in response.json()["citations"]} == {1, 3}
+    assert response.headers["x-p2-deepseek-calls"] == "0"
+
+
+def test_growth_reference_keeps_its_operands_with_the_absolute_result():
+    question = (
+        "¿Cuántos millones de pesos adicionales obtuvo Grupo Faro en utilidad neta de 9M23 a 9M24 "
+        "y qué variación relativa supone?"
+    )
+    part, = interpret_query(question).parts
+    assert part.financial.operation == "percent_change" and part.financial.additional_difference
+    assert (part.financial.base.label, part.financial.current.label) == ("9M23", "9M24")
+
+
+def test_disclosure_intent_does_not_require_named_recipients():
+    question = (
+        "Menciona la política de revelación del riesgo de liquidez de la Tenedora. "
+        "A continuación enumera las metodologías de gestión de liquidez."
+    )
+    policy, management = interpret_query(question).parts
+    assert policy.documentary.kind == "list" and "revelacion" in policy.documentary.facets[0]
+    assert management.documentary.kind == "passage"
+    assert ("pruebas",) in management.documentary.facets

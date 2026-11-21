@@ -23,7 +23,10 @@ from .deepseek_wire import UsageTotals
 from .hybrid_planner import DeterministicPlanner, FinanceConstraints, HybridPlanner, Plan
 from .finance import Abstain, PERIOD, check_periods, check_stock_sum, normalize
 from .financial_agent import CURRENCY, ENTITY_NAME, METRIC, Trace, normalize_periods, parse_intent, requires_financial_tools
-from .query_interpretation import DocumentNeed, MARKER_LEAD, QueryInterpretation, QueryPart, QuerySpan, TOPIC_ALIASES, request_spans
+from .query_interpretation import (
+    DocumentNeed, MARKER_LEAD, QueryInterpretation, QueryPart, QuerySpan, TOPIC_ALIASES,
+    presentation_requirements, request_spans,
+)
 
 
 MODE = "híbrido experimental"
@@ -56,7 +59,7 @@ EXTRA_FINANCIAL = re.compile(r"[.?!;]\s+(?=(?:[¿¡]\s*)?(?:dame|indica|muestra|
 INDEPENDENT_OPERATIONS = re.compile(r"\bprimero[, :]\s*(.+?)(?:[;.]\s*|\s+)segundo[, :]\s*(.+)", re.I)
 PARALLEL_METRICS = re.compile(r"\btanto\s+(?:el\s+|la\s+)?([^,.;?]+?)\s+como\s+(?:el\s+|la\s+)?", re.I)
 COORDINATED_FINANCE = re.compile(
-    r"(?:,?\s+y,?\s+(?:por (?:separado|otro lado|otra parte),?\s+)?|[;]\s*)(?="
+    r"(?:,?\s+y,?\s+(?:(?:por (?:separado|otro lado|otra parte)|en otr[oa] (?:apartado|secci[oó]n|bloque)),?\s+)?|[;]\s*)(?="
     r"(?:calcula|muestra|dame|indica|estima|determina|reporta)\b|"
     r"(?:el|la)\s+(?:cambio|variaci[oó]n|movimiento|diferencia|crecimiento)\b)",
     re.I,
@@ -77,7 +80,7 @@ def plain(text):
 # Patrones de evidencia, aplicados a cualquier entidad y fuente elegible.
 REPORT_YEAR = re.compile(
     r"\b(?:estados financieros|informe anual|reporte anual|(?:politicas|capitulo|apartado)(?: de)? liquidez)"
-    r" (?:de |del )?(20\d{2})\b"
+    r" (?:de |del |en )?(20\d{2})\b"
 )
 FREQUENCY = ("mensual", "semanal", "trimestral", "anual", "diari")
 PERSONS = ("cpr", "consejo", "directivo", "administracion", "grupo")
@@ -86,14 +89,14 @@ REPORT_FORM = re.compile(r"\b(?:inform\w*|report\w*)\b")
 PORTFOLIO = (r"\b(?:(?:segment\w*|divid\w*|separ\w*|categorias?)\b.{0,80}\b(?:portafolio|cartera)"
              r"|segmentos?\b.{0,80}\bcredito|(?:portafolio|cartera)\b.{0,80}\bsegmentos?)\b")
 ORIGINATION = r"\b(?:control\w*|mitigante\w*|verific\w*|valid\w*)\b.{0,95}\boriginacion\b"
-LIQUIDITY_TOOLS = r"\b(?:herramientas|medidas|metodologias)\b.{0,70}\b(?:gestion|contingencia|operativas)\b"
-REPORTING_POLICY = r"\b(?:informar|informacion|revelacion|divulgacion)\b.{0,85}\b(?:consejo|autoridades)\b"
+LIQUIDITY_TOOLS = r"\b(?:herramientas|medidas|metodologias)\b.{0,70}\b(?:gestion|contingencia|operativas|escenarios adversos)\b"
+REPORTING_POLICY = r"\b(?:informar|informacion|revelacion|divulgacion|comunicacion)\b.{0,85}\b(?:consejo|autoridades)\b"
 LIQUIDITY_COVERAGE = re.compile(r"\b(?:ccl|coeficiente de cobertura de liquidez)\b")
 CONCEPT_REQUEST = re.compile(r"\b(?:significa|define|definicion|horizonte|intervalo|mide|calcula|flujos?)\b")
 NOMINAL_DEFINITION = re.compile(r"\b(?:definicion|concepto) (?:del?|de la) (.+?)(?:[.?!]|$)")
 SCOPE_QUESTION = re.compile(
     r"\b(?:se pueden? (?:atribuir|aplicar)|puedo concluir|es exhaustiv[oa]|es suficiente para afirmar|"
-    r"(?:demuestra|acredita|prueba de que)\b.{0,45}\b(?:todas?|cada)|"
+    r"(?:demuestra[n]?|acredita[n]?|prueba de que|prueban)\b.{0,65}\b(?:todas?|cada)|"
     r"(?:subsidiarias|filiales)\b.{0,45}\bmism[oa]s?\b)"
 )
 OPEN_FRAMES = (
@@ -120,15 +123,17 @@ def document_needs(question, *, context=None, compound=False):
     content = documentary_query(question)
     text = plain(content)
     year_match = REPORT_YEAR.search(text)
+    if not year_match and re.search(r"\b(?:administracion|gestion|politicas?) de (?:riesgo de )?liquidez\b", text):
+        year_match = re.search(r"\b(?:descritas? |documentadas? )?(?:en|de) (20\d{2})\b", text)
     year = int(year_match[1]) if year_match else None
     if (RESTRICTION.search(text) or any(int(y) > date.today().year for y in re.findall(r"\b20\d{2}\b", text))
-            or re.search(r"\d", REPORT_YEAR.sub("", text))):
+            or re.search(r"\d", text.replace(year_match[0], "", 1) if year_match else text)):
         return []
     scope = next((scope for scope in ("tenedora", "gfnorte", "banorte")
                   if re.search(rf"\b{scope}\b", text)), None)
     if scope is None and re.search(r"\b(?:informe|documento) ficticio\b", text):
         scope = "ficticio"
-    report = "financial" if "estados financieros" in text or (year_match and "liquidez" in year_match[0]) else (
+    report = "financial" if "estados financieros" in text or (year and "liquidez" in text) else (
         "annual" if re.search(r"\b(?:informe|reporte) anual\b", text) else None
     )
     if context is not None:
@@ -148,12 +153,26 @@ def document_needs(question, *, context=None, compound=False):
         if canonical in TOPIC_ALIASES:
             return [DocumentNeed(topic=CANONICAL_TOPICS.get(canonical, definition[0]), kind="definition",
                                  scope=scope, year=year, report=report)]
+    if (
+        {"netas", "salidas", "liquidas"} <= keys or {"netas", "salidas", "liquidos"} <= keys
+    ) and re.search(r"\b(?:indicador|coeficiente)\b", text) and re.search(r"\b(?:denomina|compara|mide)\b", text):
+        return [DocumentNeed(topic="coeficiente de cobertura de liquidez", kind="definition",
+                             scope=scope, year=year, report=report,
+                             facets=(("salidas",), ("netas",), ("dias",), ("estres", "tension")))]
+    if "contingencia" in keys and {"liquidez", "financiamiento"} <= keys and re.search(
+        r"\b(?:instrumento|mecanismo|plan)\b", text
+    ):
+        return [DocumentNeed(topic="riesgo de balance y liquidez", kind="passage",
+                             scope=scope, year=year, report=report,
+                             facets=(("contingencia",), ("financiamiento",), ("limites",)),
+                             current_report=bool(scope and year is None))]
     if scope_question and "politicas" in keys and ("liquidez" in keys or scope == "tenedora"):
         topic = "políticas de liquidez" if "liquidez" in keys else "políticas de la Tenedora"
         return [DocumentNeed(topic=topic, kind="scope", scope=scope, year=year, report=report,
                              current_report=scope == "tenedora" and year is None)]
-    if ({"politica", "politicas"} & keys and "liquidez" in keys
-            and re.search(r"\b(?:divulgacion|revelacion|informar)\b", text)):
+    if {"politica", "politicas"} & keys and "liquidez" in keys and (
+        {"divulgacion", "revelacion", "informar"} & keys or re.search(REPORTING_POLICY, text)
+    ):
         if not re.search(LIQUIDITY_TOOLS, text):
             return [DocumentNeed(topic="políticas de liquidez", kind="list", scope=scope, year=year, report=report,
                                  facets=(("informacion", "revelacion", "divulgacion"),))]
@@ -165,7 +184,7 @@ def document_needs(question, *, context=None, compound=False):
     ):
         return [DocumentNeed(topic=topic, kind="passage", scope=scope, year=year, report=report,
                              facets=facets, anchor=anchor) for _, topic, facets, anchor in OPEN_FRAMES[:2]]
-    if {"politica", "liquidez"} <= keys and re.search(REPORTING_POLICY, text) and re.search(LIQUIDITY_TOOLS, text):
+    if {"politica", "politicas"} & keys and "liquidez" in keys and re.search(REPORTING_POLICY, text) and re.search(LIQUIDITY_TOOLS, text):
         return [
             DocumentNeed(topic="políticas de liquidez", kind="list", scope=scope or "tenedora", year=year, report=report,
                          facets=(("consejo",), ("autoridades",)), current_report=year is None),
@@ -278,7 +297,7 @@ def financial_need(question, primary):
     if match["operation"] == "variacion" and not relative:
         return None
     return replace(primary, metric=metric, operation="percent_change" if relative else "difference",
-                   additional_difference=False, percentage_points=False, definition_check=False)
+                   additional_difference=False, percentage_points=False, definition_check=False, explicit_sign=False)
 
 
 def split_financial_operations(question):
@@ -320,6 +339,7 @@ def split_financial_operations(question):
             return None
         if not all(len(set(PERIOD.findall(normalize_periods(part)))) == 2 for part in (first, second)):
             return None
+    first = re.sub(r"^[^:;.!?]{0,100}:\s*(?=(?:el|la)\s+)", "", first, flags=re.I)
     first_periods = list(PERIOD.finditer(normalize_periods(first)))
     if len(first_periods) == 2 and not PERIOD.search(normalize_periods(second)):
         # El segundo apartado sin fechas usa el par común previamente indicado.
@@ -352,11 +372,25 @@ def interpret_query(question):
     source = QuerySpan(start=0, end=len(question), text=question)
     spans = request_spans(question)
     financial_parts = split_financial_operations(question)
+    if len(spans) == 2 and not financial_parts:
+        routes = [requires_financial_tools(span.text) and bool(METRIC.search(span.text)) for span in spans]
+        if routes.count(True) == 1:
+            documentary = spans[routes.index(False)]
+            needs = document_needs(documentary.text, compound=True)
+            if len(needs) == 1 and (
+                not METRIC.search(documentary.text) or needs[0].kind in {"definition", "scope"}
+            ):
+                return QueryInterpretation(parts=tuple(
+                    interpret_finance(span.text, span) if finance else
+                    QueryPart(span=span, kind="documentary", status="valid", documentary=needs[0],
+                              presentation=presentation_requirements(span.text))
+                    for span, finance in zip(spans, routes, strict=True)
+                ))
     if financial_parts:
-        origins = spans if len(spans) == 2 else (source, source)
-        return QueryInterpretation(parts=tuple(
-            interpret_finance(text, span, source) for text, span in zip(financial_parts, origins, strict=True)
-        ))
+        origins = spans[:2] if len(spans) >= 2 else (source, source)
+        parts = tuple(interpret_finance(text, span, source)
+                      for text, span in zip(financial_parts, origins, strict=True))
+        return QueryInterpretation(parts=(*parts, *(unresolved_document(span) for span in spans[2:])))
 
     if requires_financial_tools(question):
         # El flujo histórico reconoce operaciones con referencias a la misma
@@ -386,10 +420,18 @@ def interpret_query(question):
         needs = document_needs(question)
         if needs:
             return QueryInterpretation(parts=tuple(
-                QueryPart(span=source, kind="documentary", status="valid", documentary=need) for need in needs
+                QueryPart(span=source, kind="documentary", status="valid", documentary=need,
+                          presentation=presentation_requirements(source.text)) for need in needs
             ))
         return QueryInterpretation(parts=(unresolved_document(source),))
 
+    combined = document_needs(question)
+    if len(spans) == len(combined) == 2:
+        return QueryInterpretation(parts=tuple(
+            QueryPart(span=span, context=source, kind="documentary", status="valid", documentary=need,
+                      presentation=presentation_requirements(span.text))
+            for span, need in zip(spans, combined, strict=True)
+        ))
     parts = []
     first_needs = document_needs(spans[0].text, compound=True)
     inherited = first_needs[0] if len(first_needs) == 1 else None
@@ -408,6 +450,7 @@ def interpret_query(question):
 
 
 def interpret_finance(text, span, context=None):
+    presentation = presentation_requirements(span.text)
     try:
         intent = parse_intent(text)
         check_stock_sum(intent.operation, intent.metric)
@@ -416,18 +459,21 @@ def interpret_finance(text, span, context=None):
         normalized = plain(reason)
         status = ("incompatible" if any(word in normalized for word in ("moneda", "no es aditiva", "incompatib"))
                   else "unsupported" if "restriccion" in normalized else "ambiguous")
-        return QueryPart(span=span, context=context, kind="financial", status=status, reason=reason)
+        return QueryPart(span=span, context=context, kind="financial", status=status, reason=reason, presentation=presentation)
     try:
         check_periods(intent.operation, intent.base, intent.current)
     except Abstain as exc:
         return QueryPart(span=span, context=context, kind="financial", status="incompatible",
-                         reason=str(exc), financial=intent)
-    return QueryPart(span=span, context=context, kind="financial", status="valid", financial=intent)
+                         reason=str(exc), financial=intent, presentation=presentation)
+    return QueryPart(span=span, context=context, kind="financial", status="valid", financial=intent, presentation=presentation)
 
 
 def unresolved_document(span):
-    return QueryPart(span=span, kind="documentary", status="unsupported",
-                     reason="No se pudo representar el apartado con los criterios de evidencia.")
+    future = [year for year in re.findall(r"\b20\d{2}\b", span.text) if int(year) > date.today().year]
+    reason = ("Los informes disponibles no acreditan un valor ni una obligación futura para " + ", ".join(future) + "."
+              if future else "No se pudo representar el apartado con los criterios de evidencia.")
+    return QueryPart(span=span, kind="documentary", status="unsupported", reason=reason,
+                     presentation=presentation_requirements(span.text))
 
 
 def doc_support(need, snippet):
@@ -644,7 +690,9 @@ class HybridAgent:
                 else:
                     # Preserve the original extractive path for a single request.
                     # In compounds, the verifier decides which of its passages can be reused.
-                    base = await self.documentary.answer(question)
+                    base = await self.documentary.answer(
+                        first.span.text if any(part.kind == "financial" for part in interpretation.parts[1:]) else question
+                    )
                 reply = base
                 budget.tools.extend(base.tools_used)
                 original_time = perf_counter()
@@ -654,6 +702,10 @@ class HybridAgent:
                                                       interpretation=interpretation)
                 else:
                     reply, stage = await self.documents(question, base, budget, totals, interpretation)
+                if len(interpretation.parts) == 2 and {part.kind for part in interpretation.parts} == {
+                    "financial", "documentary"
+                } and interpretation.parts[1].status == "valid":
+                    reply, stage = await self.complete_mixed(question, reply, budget, totals, interpretation)
         except (TimeoutError, ProviderUnavailable, KeyError, OSError, sqlite3.Error, RuntimeError):
             stage = "fallback"
         finally:
@@ -661,6 +713,11 @@ class HybridAgent:
             if pending and len(interpretation.parts) > 1:
                 outstanding = ", ".join(str(i + 1) for i in sorted(pending))
                 reply = self.partial(reply, f"los apartados {outstanding} de la solicitud")
+                reasons = [interpretation.parts[i].reason for i in sorted(pending)
+                           if interpretation.parts[i].reason and interpretation.parts[i].reason not in reply.answer]
+                if reasons:
+                    reply = reply.model_copy(update={"answer": " ".join([reply.answer, *reasons]),
+                                                     "warnings": [*reply.warnings, *reasons]})
                 if reply.status == "answered" and stage in {"complete", "rescued"}:
                     stage = "partial-rescue" if stage == "rescued" else "partial"
             coverage = (
@@ -703,6 +760,31 @@ class HybridAgent:
                 LOGGER.info("hybrid_rescue id=%s activated=%s attempted=%s verified=%s rescue_ms=%s outcome=%s",
                             reply.request_id, int(activated), attempted, verified, rescue_ms, stage)
         return reply.model_copy(update={"provider_mode": MODE, "tools_used": budget.tools})
+
+    async def complete_mixed(self, question, first, budget, totals, interpretation):
+        """Acreditar el segundo apartado con su propia ruta y el presupuesto compartido."""
+        part = interpretation.parts[1]
+        if part.documentary:
+            empty = first.model_copy(update={"answer": "", "citations": [], "warnings": [],
+                                            "tools_used": [], "status": "abstained"})
+            second, _ = await self.documents(question, empty, budget, totals, interpretation)
+        else:
+            trace = Trace()
+            budget.executed_parts.add(1)
+            try:
+                second = await self.financial.run_intent(part.financial, trace, MAX_TOOLS - len(budget.tools))
+            finally:
+                budget.tools.extend(trace.tools)
+            if second.status == "answered" and trace.result and set(part.financial.currencies) <= trace.verified_currencies:
+                budget.evidenced_parts.add(1)
+        if 1 not in budget.evidenced_parts:
+            return first, "partial"
+        return first.model_copy(update={
+            "answer": f"{first.answer} {second.answer}",
+            "citations": list({cite.evidence_id: cite for cite in [*first.citations, *second.citations]}.values()),
+            "warnings": list(dict.fromkeys([*first.warnings, *second.warnings])),
+            "status": "answered",
+        }), "rescued" if 0 in budget.evidenced_parts else "partial-rescue"
 
     async def ask(self, question, slots, totals, budget):
         if not self.planner:
@@ -915,6 +997,11 @@ class HybridAgent:
                 prefix = "Medidas de gestión: "
             parts.append(prefix + cite.snippet)
         parts = list(dict.fromkeys(parts))
+        if len(covered) == 2 and {needs[index].topic for index in covered} == {
+            "portafolio credito", "originacion mitigantes"
+        } and re.search(r"\b(?:relacionan|relacion|vinculo)\b", plain(question)):
+            parts.append("La segmentación organiza la gestión del riesgo por portafolio. La identificación y la "
+                         "validación de información son controles aplicados al originar el crédito.")
         warnings = []
         if len(covered) != len(needs):
             missing = ", ".join(need.topic for i, need in needs.items() if i not in covered)

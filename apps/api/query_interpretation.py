@@ -17,26 +17,36 @@ TOPIC_ALIASES = {
 
 REQUEST = (
     r"(?:indica|describe|explica|define|enumera|señala|identifica|presenta|calcula|compara|"
-    r"interpreta|muestra|dame|determina|reporta|averigua|distingue|qué|cuál(?:es)?|cómo|a quién)"
+    r"interpreta|muestra|dame|determina|reporta|averigua|distingue|cuantifica|qué|cuál(?:es)?|cómo|a quién)"
 )
-MARKER = r"(?:por separado|por otro lado|por otra parte|en segundo lugar|a continuación|después|luego|segundo)"
+MARKER = r"(?:por separado|por otro lado|por otra parte|en otr[oa] (?:apartado|secci[oó]n|bloque)|en segundo lugar|a continuación|después|luego|segundo)"
 BOUNDARY = re.compile(
     rf"(?:[.;!?]\s+|,?\s+y,?\s+)(?=[¿¡]?(?:{MARKER}\b|{REQUEST}\b))", re.I
 )
 MARKER_LEAD = re.compile(rf"^{MARKER}\b[ ,:]*", re.I)
-ENUMERATED = re.compile(r"\b(?:dos|tres|cuatro|[2-4])\s+(?:apartados?|aspectos?|temas?|solicitudes?)\s*:", re.I)
+ENUMERATED = re.compile(
+    r"\b(?:dos|tres|cuatro|[2-4])\s+(?:apartados?|aspectos?|temas?|solicitudes?|resultados?|necesidades?)"
+    r"(?:\s+(?:independientes?|diferentes?))?(?:\s+de\b[^:;.?!]{1,120})?\s*:", re.I
+)
+RESULT_FACET = re.compile(
+    r"^(?:qu[eé]|cu[aá]nto)\s+(?:crecimiento|cambio|variaci[oó]n)\s+(?:relativ[oa]|porcentual)\s+"
+    r"(?:representa|implica|supone)\s*[.?!]?(?:\s|$)", re.I
+)
 NOMINAL_BOUNDARY = re.compile(r"\s+y\s+(?=(?:el|la|los|las)\b)", re.I)
 ATTACHMENT = re.compile(
     r"^(?:(?:cita|documenta|sustenta|fundamenta|justifica)\b"
-    r"|explica\s+(?:el|ese|este)\s+concepto\b"
+    r"|explica\s+(?:(?:el|ese|este)\s+concepto|cada\s+procedimiento)\b"
+    r"|separa\s+claramente\s+lo\s+documentado\b"
+    r"|dist[ií]nguelo\b"
+    r"|presenta\s+la\s+base(?:,|\s+y)\s+el\s+valor\s+final\b"
     r"|c[oó]mo se define\s*[?.!]"
     r"|calcula\s+(?:(?:la\s+participaci[oó]n\s+solo)|(?:su\s+participaci[oó]n))\s+si\b"
-    r"|(?:expresa|exprésal[oa]|usa|conserva|comprueba|verifica|incluye|indica|muestra|menciona)\b\s+"
+    r"|(?:expresa|exprésal[oa]|usa|conserva|comprueba|verifica|incluye|indica|muestra|menciona|señala|identifica)\b\s+"
     r"(?:(?:en|la|el|las|los|su|sus|amb[oa]s|esta|este|si)\s+)*"
-    r"(?:fuente|procedencia|página|documento|nota|definici[oó]n|comparabilidad|"
+    r"(?:fuente|procedencia|evidencia|página|documento|nota|definici[oó]n|comparabilidad|"
     r"base del cálculo|resultado|escala|unidad|moneda|porcentaje|millones|miles|puntos)\w*\b"
-    r"|(?:incluye|indica|muestra)\s+(?:(?:amb[oa]s|los|las)\s+)?(?:cifra|valor|tasa)\w*"
-    r"(?:\s+(?:original\w*|usad\w*|utilizad\w*)\b|[.!?]?\s*$))",
+    r"|(?:incluye|indica|muestra)\s+(?:(?:amb[oa]s|los|las|dos|cuatro)\s+)*(?:cifra|valor|tasa|importe)\w*"
+    r"(?:\s+(?:original\w*|usad\w*|utilizad\w*|de partida|que usaste)\b|[.!?]?\s*$))",
     re.I,
 )
 
@@ -78,6 +88,7 @@ class QueryPart(BaseModel):
     documentary: DocumentNeed | None = None
     reason: str | None = None
     context: QuerySpan | None = None
+    presentation: tuple[str, ...] = ()
 
 
 class QueryInterpretation(BaseModel):
@@ -112,15 +123,26 @@ def request_spans(question: str) -> tuple[QuerySpan, ...]:
         # Formato y restricciones se conservan en el mismo tramo. Solo una
         # solicitud independiente abre otro requisito de cobertura.
         if not explicit and (
-            ATTACHMENT.match(tail) or not documentary_query(tail)
+            re.match(r"c[oó]mo se (?:denomina|llama)\b", tail, re.I)
+            and not re.search(r"[¿?]", question[start:boundary.start()])
+        ):
+            continue
+        if not explicit and (
+            ATTACHMENT.match(tail) or RESULT_FACET.match(tail) or not documentary_query(tail)
             or re.match(r"explica\s+(?:si|qu[eé] efecto|por qu[eé])\b", tail, re.I)
             or re.match(r"(?:trata|considera|sup[oó]n)\b[^;?!]+\bcomo si\b",
                         question[start:boundary.start()].lstrip("¿¡ "), re.I)
         ):
             continue
-        if not question[start:boundary.start()].strip():
+        if not question[start:boundary.start()].strip(" ¿¡.,;:"):
             continue
         spans.append(QuerySpan(start=start, end=boundary.start(), text=question[start:boundary.start()]))
         start = boundary.end()
     spans.append(QuerySpan(start=start, end=len(question), text=question[start:]))
     return tuple(spans)
+
+
+def presentation_requirements(text: str) -> tuple[str, ...]:
+    """Extraer instrucciones de salida del tramo sin borrarlas de la solicitud."""
+    return tuple(clause.strip() for clause in re.split(r"(?<=[.!?;])\s+", text)
+                 if ATTACHMENT.match(clause.lstrip("¿¡ ")))

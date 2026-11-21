@@ -154,3 +154,14 @@ La [evaluación dirigida de robustez](ROBUSTEZ_CORPUS_2026-11-19.md) amplía la 
 | SPEC-002-AC-06 | Cero llamadas, tokens y costo externo. API y Vite activos con el planificador determinista. | NOT RUN para DeepSeek. READY en loopback. |
 
 [Diseño, validación y operación](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#interpretación-estructurada-y-evaluación-emparejada--base-4dc4589)
+
+## Corrección de referencias contextuales sobre 8e75905
+
+| Criterio | Evidencia | Estado |
+|---|---|---|
+| SPEC-002 · Periodo, entidad, moneda y escala | Pruebas metamórficas de cierres, meses, acumulados y años relativos. Verificación de fechas del reporte y perímetros de entidad. P acredita 20/20 celdas. | VERIFIED en las regresiones. La delimitación tiene casos exploratorios pendientes. |
+| SPEC-001 y T-13 · Cobertura y procedencia | Se mantienen tramos originales, instrucciones de presentación y rutas separadas para cada apartado. P13 tiene dos evidencias independientes y P16 declara el valor futuro sin respaldo. | VERIFIED en casos dirigidos. PARTIAL en la muestra nueva. |
+| SPEC-001/SPEC-002 · Generalización | Q emparejada pasa de 1 a 4 respuestas completas sobre 12 y conserva 7/7 citas válidas en el candidato. | PARTIAL. |
+| SPEC-002-AC-06 | Instancias de evaluación de solo lectura con planificador determinista y egress bloqueado. | NOT RUN. |
+
+[Auditoría y métricas](AUDITORIA_FUNCIONAL_PRUEBA_REAL.md#referencias-temporales-entidades-y-conservación-semántica)

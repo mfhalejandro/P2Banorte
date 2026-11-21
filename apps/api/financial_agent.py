@@ -12,6 +12,7 @@ from .agent import ChatResponse, ProviderUnavailable
 from .corpus import Citation, Corpus, SourceRef, documentary_query
 from .finance import Abstain, Operand, Operation, PERIOD, Period, calculate, check_periods, check_stock_sum, display, local_period, normalize
 from .currency_request import verify_currency_request
+from .temporal import TemporalMention, normalize_periods, resolve_periods
 from .financial_evidence import CURRENCY, TableCache, UnverifiedBasis, currency_key, find_candidates, read_operand
 from .market_table import is_market_metric
 
@@ -53,6 +54,14 @@ class InspectArgs(ToolArgs):
 
 
 @dataclass(frozen=True)
+class EntityMention:
+    literal: str
+    canonical: str
+    start: int
+    end: int
+
+
+@dataclass(frozen=True)
 class Intent:
     metric: str
     entity: str | None
@@ -68,11 +77,15 @@ class Intent:
     definition_check: bool = False
     consolidated: bool = False
     common_basis_required: bool = False
+    temporal_references: tuple[TemporalMention, ...] = ()
+    entity_references: tuple[EntityMention, ...] = ()
+    interpretation_text: str | None = None
+    explicit_sign: bool = False
 
 
 FINANCIAL_VERB = r"(?:compara(?:r)?|calcula(?:r)?|suma(?:r)?(?!\s+(?:de|en|entre)\b))"
 CHANGE_VERB = r"(?:cambi[oó]|vari[oó]|aument[oó]|disminuy[oó]|subi[oó]|baj[oó]|creci[oó]|cay[oó]|mejor[oó]|empeor[oó]|se\s+(?:increment[oó]|redujo|movi[oó]))"
-OPERATION_NOUN = r"(?:variaci[oó]n(?:\s+porcentual)?|diferencia(?:\s+absoluta)?|cambio|comparaci[oó]n|suma|raz[oó]n|ratio)"
+OPERATION_NOUN = r"(?:tasa de crecimiento|variaci[oó]n(?:\s+porcentual)?|diferencia(?:\s+absoluta)?|cambio|comparaci[oó]n|suma|raz[oó]n|ratio)"
 NOMINAL_OPERATION = rf"(?:la\s+|el\s+)?(?P<operation>{OPERATION_NOUN})\s+(?:del?|en|entre)\b"
 NOMINAL_PROMPT = rf"(?:dame|muestra|indica|estima|determina|reporta)(?=\s+(?:(?:la|el)\s+)?{OPERATION_NOUN}\s+(?:del?|en|entre)\b)"
 FINANCIAL_REQUEST = re.compile(
@@ -102,22 +115,6 @@ class FinancialRequest:
     definition_check: bool = False
 
 
-ORDINAL = {"primer": 1, "primero": 1, "segundo": 2, "tercer": 3, "tercero": 3, "cuarto": 4}
-QUARTER = r"(?:primer(?:o)?|segundo|tercer(?:o)?|cuarto)"
-MONTH_END = {"marzo": 3, "junio": 6, "septiembre": 9, "diciembre": 12}
-CALENDAR_MONTHS = {name: i for i, name in enumerate(
-    "enero febrero marzo abril mayo junio julio agosto septiembre octubre noviembre diciembre".split(), 1
-)}
-MONTH = "|".join(CALENDAR_MONTHS)
-MONTH_RANGE = re.compile(rf"\b({MONTH})\s*(?:[-–—]|\ba\b)\s*({MONTH})\s+de(?:l año)?\s+(20\d{{2}})\b", re.I)
-SEMESTER = re.compile(r"\b(primer(?:o)?|segundo) semestre de(?:l año)? (20\d{2})\b", re.I)
-WRITTEN_PERIOD = re.compile(
-    rf"\b(?:(?P<quarter>{QUARTER})\s+trimestres?|"
-    r"primeros\s+(?P<months>tres|seis|nueve|doce)\s+meses|"
-    r"(?:acumulad[oa]\s+(?:a|al|hasta)|enero\s*(?:[-–—]|a)\s*)\s*"
-    r"(?P<cutoff>marzo|junio|septiembre|diciembre))"
-    r"(?:\s+de(?:l\s+año)?\s+(?P<year>20\d{2})|\s+de\s+(?:ese|dicho)(?:\s+mismo)?\s+año)?", re.I,
-)
 COMPARABILITY_QUERY = re.compile(
     r"^(?:se puede afirmar que\s+)?(.+?)\s+(?:tuvo|experiment[oó]|registr[oó])"
     r"\s+una\s+variaci[oó]n\s+(?:directamente\s+)?comparable\s+entre\b", re.I,
@@ -152,8 +149,9 @@ METRIC_NAMES = {"profit": "utilidad neta", "roa": "ROA", "roe": "ROE", "market":
 ENTITY_BOUNDARY = (
     r"(?=[,.;?!:]|\s*$|\s+(?:entre|respecto|en|para|del?|al|desde|hasta|durante|seg[uú]n|"
     r"si|cuando|suponiendo|considerando|expresad[oa]s?|medid[oa]s?|[uú]nicamente|exclusivamente|"
-    r"necesito|solicito|requiero|representa|aport[oó]|"
-    r"(?:est[aá]n?|fue|figura|aparece|se (?:reporta|publica))(?:\s|$))\b|"
+    r"necesito|solicito|requiero|representa|aport[oó]|(?:generad|acumulad|publicad|reportad)[oa]s?(?=\s+(?:en|entre|de|al|[1-4]T)|[,.;?!:]|\s*$)|correspondient(?:e|es)\s+a|referid[oa]s?\s+a|que\s+corresponde\s+a|"
+    r"(?:est[aá]n?|fue|figura|aparece|se (?:reporta|publica))(?:\s|$)|"
+    r"(?:tuvo|experiment[oó]|registr[oó]|present[oó])(?=\s+(?:una?|el|la)\s))\b|"
     rf"\s+{PERIOD.pattern})"
 )
 ENTITY_NAME = re.compile(
@@ -173,9 +171,9 @@ CHANGE_QUESTION = re.compile(
     rf"\b(?:{CHANGE_VERB}|avanz[oó]|perdi[oó]|evolucion\w*|cu[aá]ntos?.{{0,55}}adicionales|"
     r"variaci[oó]n absoluta|diferencia absoluta|magnitud.{0,30}(?:incremento|descenso)|crecimiento directo|"
     r"(?:crecimiento|variaci[oó]n|incremento|ca[ií]da|descenso) (?:relativ[oa]|porcentual)|"
-    r"cambio|movimiento|difiere|descenso)\b", re.I,
+    r"cambio|movimiento|difiere|descenso|tasa de crecimiento)\b", re.I,
 )
-RELATIVE_UNIT = re.compile(r"\b(?:porcentualmente|porcentual|relativ[oa]|qu[eé] porcentaje|crecimiento directo)\b", re.I)
+RELATIVE_UNIT = re.compile(r"\b(?:porcentualmente|porcentual|relativ[oa]|qu[eé] porcentaje|crecimiento directo|tasa de crecimiento)\b", re.I)
 EXPLICIT_POINTS = re.compile(r"\bpuntos porcentuales\b", re.I)
 PURPOSE = re.compile(r"^para\s+(?:obtener|estimar|conseguir|construir|expresar)\b", re.I)
 UNSUPPORTED_QUALIFIER = re.compile(
@@ -185,67 +183,15 @@ UNSUPPORTED_QUALIFIER = re.compile(
 REPRESENTED_QUALIFIER = re.compile(
     rf"\b(?:(?:solo|solamente|[uú]nicamente|exclusivamente)\s+(?:(?:en|al|la|el)\s+)?"
     rf"(?={CURRENCY.pattern}|{METRIC.pattern}|[1-4]T\d\d\b)"
-    r"|sin\s+(?:mezclar\s+(?:los\s+)?valores|cruzar\s+periodos)|(?:y\s+)?no\s+sumes\s+los\s+saldos)\b",
+    r"|sin\s+(?:mezclar\s+(?:los\s+)?valores|cruzar\s+periodos|convertirl[oa]s?)|(?:y\s+)?no\s+sumes\s+los\s+saldos)\b",
     re.I,
 )
 BASE_CONDITION = re.compile(r"\b(?:mism[oa]\s+(?:base|per[ií]metro)|(?:base|per[ií]metro)\s+com[uú]n|"
                             r"ajustad\w*|reexpresad\w*|suponiendo\b.{0,90}\b(?:excluy|incluy)\w*)\b", re.I)
 
 
-def calendar_range(match):
-    start, end, year = match.groups()
-    a, b = CALENDAR_MONTHS[start.lower()], CALENDAR_MONTHS[end.lower()]
-    if a in (1, 4, 7, 10) and b == a + 2:
-        return f"{b // 3}T{year[-2:]}"
-    if a == 1 and b in (6, 9, 12):
-        return f"{b}M{year[-2:]}"
-    if a == 7 and b == 12:
-        return f"2S{year[-2:]}"
-    return match[0]
-
-
-def normalize_periods(text: str) -> str:
-    text = MONTH_RANGE.sub(calendar_range, text)
-    text = SEMESTER.sub(lambda match: ("6M" if match[1].lower().startswith("primer") else "2S")
-                        + match[2][-2:], text)
-    text = re.sub(
-        rf"\b({QUARTER})(\s+(?:y|a|al)\s+(?:el\s+)?{QUARTER}\s+trimestres?\b)",
-        r"\1 trimestre\2", text, flags=re.I,
-    )
-    year = None
-    anchors = {local_period(hit).year for hit in PERIOD.finditer(text)}
-    if len(anchors) == 1:
-        year = str(next(iter(anchors)))
-
-    written = list(WRITTEN_PERIOD.finditer(text))
-
-    def replace_period(match):
-        nonlocal year
-        ordinal, months, cutoff, explicit = match.groups()
-        if re.match(r" del año (?:siguiente|mismo)\b", text[match.end():], re.I):
-            return match[0]
-        year = explicit or year
-        if not year and ordinal:
-            following = next((hit for hit in written if hit.start() > match.end()), None)
-            if following and re.fullmatch(r"\s+(?:y|a|al)\s+(?:el\s+)?", text[match.end():following.start()], re.I):
-                year = following["year"]
-        if not year:
-            return match[0]
-        size = MONTH_END[cutoff.lower()] if cutoff else {"tres": 3, "seis": 6, "nueve": 9, "doce": 12}.get((months or "").lower())
-        label = f"{ORDINAL[ordinal.lower()]}T" if ordinal else f"{size}M"
-        return label + year[-2:]
-
-    def resolve_relative(match):
-        ordinal, direction = match.groups()
-        previous = list(PERIOD.finditer(normalized[:match.start()]))
-        if not previous:
-            return match[0]
-        year = local_period(previous[-1]).year + int(direction == "siguiente")
-        return f"{ORDINAL[ordinal.lower()]}T{year % 100:02}"
-
-    normalized = WRITTEN_PERIOD.sub(replace_period, text)
-    return re.sub(r"\b(primer(?:o)?|segundo|tercer(?:o)?|cuarto)(?: trimestre)? "
-                  r"(?:de ese mismo año|del año (siguiente|mismo))\b", resolve_relative, normalized, flags=re.I)
+def canonical_entity(name: str) -> str:
+    return "GFNorte" if normalize(name) in {"gfnorte", "grupo financiero banorte"} else name.strip()
 
 
 def operational_request(content):
@@ -257,7 +203,7 @@ def operational_request(content):
     metric = METRIC_NAMES[found[0].lastgroup]
     subject = next(ENTITY_NAME.finditer(content), None)
     if subject:
-        metric += " de " + ("GFNorte" if subject["known"] else subject["other"])
+        metric += " de " + canonical_entity(subject[subject.lastgroup])
     share = bool(TEMPORAL_SHARE.search(content))
     points = bool(EXPLICIT_POINTS.search(content))
     if (re.search(r"\bsuma(?:r)?\s+(?:los?|las?)\b", content, re.I)
@@ -335,9 +281,11 @@ def recognize_financial_request(question: str) -> FinancialRequest | None:
         operation = "sum"
     elif keyword in {"razon", "ratio"}:
         operation = "ratio"
-    elif cue["relative"] or (keyword.startswith("variacion") and not points):
+    elif cue["relative"] or (keyword.startswith(("variacion", "tasa crecimiento")) and not points):
         operation = "percent_change"
-    if operational and (not normalize(indicator) or re.match(r"(?:el\s+)?aumento\s+de\b", indicator, re.I)):
+    if operational and (not normalize(indicator) or re.match(
+        rf"(?:el\s+)?aumento\s+de\b|(?:(?:por separado|cu[aá]nto)\s+)+{CHANGE_VERB}\b", indicator, re.I
+    )):
         return operational
     return FinancialRequest(content, indicator, operation, points)
 
@@ -349,6 +297,14 @@ def requires_financial_tools(question: str) -> bool:
 
 def parse_intent(question: str) -> Intent:
     verify_currency_request(question)
+    temporal_references = resolve_periods(question)
+    original_question = question
+    entity_references = tuple(
+        EntityMention(hit[group], canonical_entity(hit[group]),
+                      hit.start(group), hit.end(group))
+        for hit in ENTITY_NAME.finditer(question)
+        for group in (hit.lastgroup,)
+    )
     question = re.sub(r"\b(?:exclusivamente|únicamente|unicamente|solamente|solo)\s+"
                       rf"(?={CURRENCY.pattern})", "", question, flags=re.I)
     missing = "Indica un indicador y dos periodos distintos para identificar la comparación solicitada."
@@ -363,6 +319,9 @@ def parse_intent(question: str) -> Intent:
             r".*\bsolo si\b[^?]*(?:pertenece|incluid[oa]|forma parte)[^?]*[.?]?\s*", unbound, re.I
         ) or len(UNSUPPORTED_QUALIFIER.findall(unbound)) != 1:
             raise Abstain("No se pudo interpretar la restricción indicada sin cambiar el alcance de la operación.")
+    if any(item.period is None for item in temporal_references):
+        check_stock_sum(request.operation, request.indicator)
+        raise Abstain("La referencia temporal no identifica de forma inequívoca los periodos solicitados.")
     matches = list(PERIOD.finditer(request.content))
     periods = list(dict.fromkeys(local_period(match) for match in matches))
     prefix = request.indicator.strip(" ¿?!:,")
@@ -382,7 +341,7 @@ def parse_intent(question: str) -> Intent:
     entities = [subject] if subject else list(ENTITY_NAME.finditer(request.content))
     entity = None
     if len(entities) == 1:
-        entity = entities[0]["other"] or entities[0]["known"]
+        entity = canonical_entity(entities[0][entities[0].lastgroup])
     elif entities:
         raise Abstain("No se pudo identificar una sola entidad para esta operación.")
     consolidated = False
@@ -392,14 +351,25 @@ def parse_intent(question: str) -> Intent:
             consolidated = True
     if metric_match := METRIC.fullmatch(metric.strip()):
         metric = METRIC_NAMES[metric_match.lastgroup]
-    if entity and normalize(entity) == "grupo financiero banorte":
-        entity = "GFNorte"
+    fallback = re.search(r"\bsi no encuentras?\b", original_question, re.I)
+    subjects = {normalize(item.canonical) for item in entity_references if not fallback or item.start < fallback.start()}
+    if len(subjects) > 1:
+        raise Abstain("La operación menciona entidades distintas. Indica una entidad por operación.")
+    if subjects and (not entity or normalize(entity) not in subjects):
+        raise Abstain("No se pudo asociar el indicador con una sola entidad solicitada.")
+    if any(item.kind == "closing" for item in temporal_references if item.role == "operand") and (
+        metric in {"utilidad neta", "ROA", "ROE"} and not all(
+            item.kind == "interval" or re.match(r"(?:[1-4]T|[369]M|12M|2S)\d{2}$", item.text, re.I)
+            for item in temporal_references if item.role == "operand"
+        )
+    ):
+        raise Abstain("Una fecha de cierre por sí sola no identifica el intervalo del indicador solicitado.")
     if len(periods) != 2 or not normalize(metric):
         check_stock_sum(request.operation, metric)
         raise Abstain(missing)
     if (request.operation == "participation" and periods[0].kind != "ytd"
             or request.operation != "participation" and
-            re.search(r"\b(?:respecto\s+(?:al?|de)|frente a)\s+$",
+            re.search(r"\b(?:respecto\s+(?:al?|de)|frente al?)\s+$",
                       request.content[:matches[-1].start()], re.I)):
         periods.reverse()
     key = request.content.casefold()
@@ -438,7 +408,8 @@ def parse_intent(question: str) -> Intent:
     return Intent(metric, entity, *periods, request.operation, "inspecciona" in key,
                   next(iter(currencies), None), next(iter(scales), None), request.percentage_points,
                   request.additional_difference, currencies_requested, request.definition_check, consolidated,
-                  bool(BASE_CONDITION.search(request.content)))
+                  bool(BASE_CONDITION.search(request.content)), temporal_references, entity_references, original_question,
+                  bool(re.search(r"\bcon signo\b", original_question, re.I)))
 
 
 @dataclass
@@ -613,7 +584,17 @@ class FinancialAgent:
             if period is None:
                 raise Abstain("La búsqueda propone un periodo ajeno a la pregunta.")
             other = intent.current if period == intent.base else intent.base
-            trace.searched[params.period] = find_candidates(self.corpus, intent.metric, period, other)
+            refs = find_candidates(self.corpus, intent.metric, period, other)
+            reports = {item.period for item in intent.temporal_references if item.role == "report" and item.period}
+            if reports:
+                allowed = {
+                    entry["doc_id"] for entry in trace.documents
+                    if reports <= {local_period(hit) for hit in PERIOD.finditer(entry["filename"].replace("_", " "))}
+                }
+                refs = [ref for ref in refs if ref.doc_id in allowed]
+                if not refs:
+                    trace.rejected[params.period] = "La evidencia verificable no se encontró en el reporte solicitado."
+            trace.searched[params.period] = refs
         elif name == "read_source":
             params = ReadArgs.model_validate(args)
             if params.ref not in trace.searched.get(params.period, []):
@@ -713,10 +694,13 @@ class FinancialAgent:
                     context.prec = 50
                     normalized = base.value * base.unit.scale / current.unit.scale
                 conversion = f" B equivale a {normalized:f} {current.unit.label}."
+            rendered = display(value)
+            if intent and intent.explicit_sign and value > 0:
+                rendered = "+" + rendered
             answer = (f"{current.metric} · {current.entity}. "
                       f"Base B ({base.period.label}): {self.operand_text(base)}."
                       f"{conversion} Periodo A ({current.period.label}): {self.operand_text(current)}. "
-                      f"{formula} = {display(value)} {unit}.")
+                      f"{formula} = {rendered} {unit}.")
             if intent and intent.additional_difference:
                 delta, delta_unit, _ = calculate("difference", base, current)
                 answer += f" Diferencia con signo: {display(delta)} {delta_unit}."

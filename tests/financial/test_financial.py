@@ -539,3 +539,73 @@ def test_indicator_label_distinguishes_a_section_heading_from_a_second_row():
     assert row_label("ROA (3)\nOperación:") == "ROA (3)"
     assert metric_label("ROA (3)\nOperación:") == "roa"
     assert metric_label("ROA (3)\nROE (2)") != "roa"
+
+
+@pytest.mark.parametrize("expression", [
+    "de 1T24 a 2T24",
+    "entre el cierre de marzo y el cierre de junio de 2024",
+    "del cierre de marzo de 2024 al cierre de junio del mismo año",
+])
+def test_stock_date_paraphrases_preserve_the_operands_and_their_origin(expression):
+    question = f"Calcula la diferencia de activo total de Grupo Faro {expression}."
+    intent = parse_intent(question)
+    assert (intent.base.label, intent.current.label, intent.operation) == ("1T24", "2T24", "difference")
+    for mention in intent.temporal_references:
+        assert mention.text == question[mention.start:mention.end]
+
+
+def test_report_date_is_not_an_operand():
+    question = (
+        "En la tabla bursátil de 2T25, calcula el cambio de capitalización de mercado de "
+        "Grupo Faro de 3T24 a 1T25, en millones de pesos."
+    )
+    intent = parse_intent(question)
+    assert (intent.base.label, intent.current.label) == ("3T24", "1T25")
+    report, *_ = intent.temporal_references
+    assert (report.role, report.period.label) == ("report", "2T25")
+
+
+def test_relative_accumulation_keeps_duration_and_comparison_direction():
+    intent = parse_intent(
+        "Calcula la tasa de crecimiento de utilidad neta de Grupo Faro de enero a septiembre de 2025 "
+        "frente al mismo intervalo del año anterior."
+    )
+    assert (intent.base.label, intent.current.label, intent.operation) == ("9M24", "9M25", "percent_change")
+    interval, reference = intent.temporal_references
+    assert reference.reference == interval.start
+    assert interval.period.months == reference.period.months == 9
+
+
+def test_two_antecedents_and_monthly_closes_do_not_invent_financial_flows():
+    with pytest.raises(Abstain, match="inequívoca"):
+        parse_intent("Compara la utilidad neta de Grupo Faro de 3T24 y 2T25 con el mismo periodo de 2023.")
+    with pytest.raises(Abstain, match="intervalo"):
+        parse_intent("Compara la utilidad neta de Grupo Faro entre el cierre de marzo y el cierre de junio de 2024.")
+
+
+@pytest.mark.parametrize(("wording", "canonical"), [
+    ("Grupo Financiero Banorte correspondiente a", "GFNorte"),
+    ("GFNorte reportado en", "GFNorte"),
+    ("Banco Banorte correspondiente a", "Banco Banorte"),
+    ("GFNorte Horizonte reportado en", "GFNorte Horizonte"),
+])
+def test_entity_trace_respects_predicates_and_perimeters(wording, canonical):
+    question = f"Calcula la diferencia de ROE de {wording} 1T24 y 2T24."
+    intent = parse_intent(question)
+    entity, = intent.entity_references
+    assert intent.entity == entity.canonical == canonical
+    assert entity.literal == question[entity.start:entity.end]
+
+
+def test_single_operation_does_not_select_an_entity_from_two_perimeters():
+    with pytest.raises(Abstain, match="entidad"):
+        parse_intent("Calcula el cambio de ROE de Banco Banorte y de GFNorte de 1T24 a 2T24.")
+
+
+def test_predicate_after_subject_does_not_remove_the_comparability_check():
+    intent = parse_intent(
+        "¿Se puede afirmar que la utilidad neta de GFNorte registró una variación comparable entre 3T24 y 3T25?"
+    )
+    assert intent.entity == "GFNorte"
+    assert intent.entity_references[0].literal == "GFNorte"
+    assert (intent.base.label, intent.current.label) == ("3T24", "3T25")

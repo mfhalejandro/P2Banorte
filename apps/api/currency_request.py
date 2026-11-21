@@ -38,7 +38,7 @@ def verify_currency_request(question):
     text = " ".join(text.split())
     if re.search(
         r"\b(?:pesos|d[oó]lares) (?:de|del) "
-        r"(?!grupo\b|banco\b|gfnorte\b|(?:la )?tenedora\b)(?=[^\W\d_])", text, re.I,
+        r"(?!grupo\b|banco\b|gfnorte\b|(?:la )?tenedora\b|(?:la |el )?(?:fila|columna|tabla|cuadro|reporte|informe)\b)(?=[^\W\d_])", text, re.I,
     ):
         raise Abstain("No se puede acreditar un resultado en la moneda solicitada.")
     codes = [hit[1] for hit in CODE_REQUIREMENT.finditer(question)]
